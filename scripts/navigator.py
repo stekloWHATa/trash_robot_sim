@@ -20,31 +20,34 @@ import numpy as np
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Polygon, PoseStamped, Twist
-from nav_msgs.msg import Odometry
+from nav_msgs.msg import Odometry, Path
 
 
 # ─── ПАРАМЕТРЫ КАРТЫ ─────────────────────────────────────────────────────── #
 RESOLUTION   = 0.25
-MAP_HALF     = 10.5
-GRID_N       = int(2 * MAP_HALF / RESOLUTION)   # 84
+MAP_HALF     = 13.5
+GRID_N       = int(2 * MAP_HALF / RESOLUTION)   # 108
 
-INFLATE_M    = 0.75
-INFLATE_C    = max(1, int(INFLATE_M / RESOLUTION))   # 3
+# Робот: тело 1.2×0.8м, полудиагональ 0.72м.
+# INFLATE_M = 1.50м (6 ячеек): жёсткий запрет — путь ≥1.50м от сырого препятствия.
+# SOFT_R    = 2 ячейки (0.50м): мягкая зона — ячейки в 0–0.50м от жёсткой границы
+#             стоят SOFT_K дороже. A* предпочтёт середину коридора, а не его край.
+# Результат: путь проходит по центру коридора, с запасом от стен.
+INFLATE_M    = 1.50
+INFLATE_C    = max(1, int(INFLATE_M / RESOLUTION))   # 6
+SOFT_R       = 2          # ячейки мягкой зоны от жёсткой границы
+SOFT_K       = 6.0        # штраф в стоимости движения через мягкую зону
 
-# ─── ДВИЖЕНИЕ ────────────────────────────────────────────────────────────── #
-MAX_LIN      = 0.65
-MAX_ANG      = 0.9
-LOOKAHEAD    = 1.5
-GOAL_R       = 0.90
-WAYPOINT_R   = 0.50
-GOAL_TIMEOUT = 120.0
-
-# ─── ПОКРЫТИЕ ────────────────────────────────────────────────────────────── #
-# Расстояние между строками зигзага — примерно ширина обзора камеры
-ROW_SPACING  = 2.5     # м
-
-# Отступ от краёв области чтобы не врезаться в стены
-AREA_MARGIN  = 0.8     # м
+# ─── ДВИЖЕНИЕ — значения по умолчанию (переопределяются из params.yaml) ───── #
+# Используются только как fallback при отсутствии внешних параметров.
+_DEF_MAX_LIN      = 0.65
+_DEF_MAX_ANG      = 0.9
+_DEF_LOOKAHEAD    = 1.5
+_DEF_GOAL_R       = 0.90
+_DEF_WAYPOINT_R   = 0.50
+_DEF_GOAL_TIMEOUT = 120.0
+_DEF_ROW_SPACING  = 2.5
+_DEF_AREA_MARGIN  = 0.8
 
 
 # ─── УТИЛИТЫ ─────────────────────────────────────────────────────────────── #
@@ -71,16 +74,27 @@ def adiff(a, b):
 
 
 def inflate(grid, r):
+    """Прямоугольная (L∞) инфляция: блокирует все ячейки в квадрате r×r."""
     out = grid.copy()
     ys, xs = np.where(grid)
     for cy, cx in zip(ys, xs):
-        for dy in range(-r, r + 1):
-            for dx in range(-r, r + 1):
-                if dx*dx + dy*dy <= r*r:
-                    ny, nx = cy+dy, cx+dx
-                    if 0 <= ny < GRID_N and 0 <= nx < GRID_N:
-                        out[ny, nx] = True
+        y0 = max(0, cy - r)
+        y1 = min(GRID_N - 1, cy + r)
+        x0 = max(0, cx - r)
+        x1 = min(GRID_N - 1, cx + r)
+        out[y0:y1 + 1, x0:x1 + 1] = True
     return out
+
+
+def make_cost_grid(blocked):
+    """Строит карту стоимости для A*.
+    Свободные ячейки вблизи жёсткой границы (SOFT_R ячеек = SOFT_R*RESOLUTION м)
+    получают штраф SOFT_K, поэтому A* прокладывает путь по центру коридора,
+    а не вплотную к стенам."""
+    soft_zone = inflate(blocked, SOFT_R) & ~blocked
+    cost = np.ones((GRID_N, GRID_N), dtype=np.float32)
+    cost[soft_zone] = SOFT_K
+    return cost
 
 
 # ─── A* ─────────────────────────────────────────────────────────────────── #
@@ -109,7 +123,11 @@ def _nearest_free(grid, cx, cy):
     return cx, cy
 
 
-def astar(grid, start, goal):
+def astar(grid, start, goal, cost_grid=None):
+    """A* с опциональной картой стоимости.
+    cost_grid: float32 массив размера (GRID_N, GRID_N), стоимость прохода через ячейку.
+    Без cost_grid — равномерная стоимость 1.0 (стандартный A*).
+    С cost_grid — A* предпочитает ячейки с низкой стоимостью (центры коридоров)."""
     sx, sy = _nearest_free(grid, start[0], start[1])
     gx, gy = _nearest_free(grid, goal[0],  goal[1])
     if (sx, sy) == (gx, gy):
@@ -131,12 +149,13 @@ def astar(grid, start, goal):
             path.append((sx, sy))
             path.reverse()
             return path
-        for dx, dy, cost in _MOVES:
+        for dx, dy, move_cost in _MOVES:
             nx, ny = cx+dx, cy+dy
             if not (0 <= nx < GRID_N and 0 <= ny < GRID_N) or grid[ny, nx]:
                 continue
             nb = (nx, ny)
-            ng = g[cur] + cost
+            cell_cost = float(cost_grid[ny, nx]) if cost_grid is not None else 1.0
+            ng = g[cur] + move_cost * cell_cost
             if ng < g.get(nb, 1e18):
                 came[nb] = cur
                 g[nb] = ng
@@ -151,11 +170,41 @@ class CoverageNavigator(Node):
     def __init__(self):
         super().__init__('coverage_navigator')
 
+        # ── ROS параметры (загружаются из config/params.yaml) ──────────────── #
+        self.declare_parameter('row_spacing',          _DEF_ROW_SPACING)
+        self.declare_parameter('area_margin',          _DEF_AREA_MARGIN)
+        self.declare_parameter('max_linear_velocity',  _DEF_MAX_LIN)
+        self.declare_parameter('max_angular_velocity', _DEF_MAX_ANG)
+        self.declare_parameter('goal_radius',          _DEF_GOAL_R)
+        self.declare_parameter('goal_timeout',         _DEF_GOAL_TIMEOUT)
+        self.declare_parameter('lookahead',            _DEF_LOOKAHEAD)
+        self.declare_parameter('waypoint_radius',      _DEF_WAYPOINT_R)
+        # Позиция центра тела робота в мировых координатах при спавне.
+        # DiffDrive в Gazebo Harmonic стартует с odom=(0,0), а не с мировой позиции.
+        # Смещение вычисляется из первого сообщения /odom и этих параметров.
+        self.declare_parameter('spawn_x', 0.0)
+        self.declare_parameter('spawn_y', -2.0)
+
+        self.row_spacing   = self.get_parameter('row_spacing').value
+        self.area_margin   = self.get_parameter('area_margin').value
+        self.max_lin       = self.get_parameter('max_linear_velocity').value
+        self.max_ang       = self.get_parameter('max_angular_velocity').value
+        self.goal_r        = self.get_parameter('goal_radius').value
+        self.goal_timeout  = self.get_parameter('goal_timeout').value
+        self.lookahead     = self.get_parameter('lookahead').value
+        self.waypoint_r    = self.get_parameter('waypoint_radius').value
+        self._spawn_x      = self.get_parameter('spawn_x').value
+        self._spawn_y      = self.get_parameter('spawn_y').value
+
         self._grid = np.zeros((GRID_N, GRID_N), dtype=bool)
         self._build_static_map()
 
         self._x = 0.0; self._y = 0.0; self._yaw = 0.0
         self._odom_ok = False
+        # Смещение odom→world: world = odom - _odom_offset_*
+        # Вычисляется однократно из первого пакета /odom
+        self._odom_x0: float | None = None
+        self._odom_y0: float | None = None
 
         # Список точек покрытия (генерируется из /scan_area)
         self._coverage_goals: list[tuple[float, float]] = []
@@ -165,7 +214,21 @@ class CoverageNavigator(Node):
         self._state     = 'WAIT_AREA'
         self._t_start   = 0.0
 
-        self._pub = self.create_publisher(Twist, '/cmd_vel', 10)
+        # Детектор застревания: если позиция не меняется дольше STUCK_TIMEOUT — сдать назад
+        self._stuck_x   = 0.0
+        self._stuck_y   = 0.0
+        self._t_stuck   = time.time()
+        self._backing   = False
+        self._t_back    = 0.0
+        STUCK_TIMEOUT   = 5.0    # с — время без движения до признания застревания
+        STUCK_DIST      = 0.15   # м — минимальное смещение за STUCK_TIMEOUT
+        BACK_DURATION   = 1.5    # с — время движения назад
+        self._STUCK_TIMEOUT  = STUCK_TIMEOUT
+        self._STUCK_DIST     = STUCK_DIST
+        self._BACK_DURATION  = BACK_DURATION
+
+        self._pub      = self.create_publisher(Twist, '/cmd_vel', 10)
+        self._path_pub = self.create_publisher(Path,  '/nav_path', 10)
         self.create_subscription(Odometry,    '/odom',       self._odom_cb,      10)
         self.create_subscription(Polygon,     '/scan_area',  self._area_cb,      10)
         self.create_subscription(PoseStamped, '/goal_pose',  self._goal_pose_cb, 10)
@@ -182,11 +245,11 @@ class CoverageNavigator(Node):
     def _build_static_map(self):
         raw = np.zeros((GRID_N, GRID_N), dtype=bool)
         walls = [
-            # Внешние стены (±10м)
-            ( 0.0,  10.0,  10.0,  0.15),
-            ( 0.0, -10.0,  10.0,  0.15),
-            ( 10.0,  0.0,  0.15, 10.0),
-            (-10.0,  0.0,  0.15, 10.0),
+            # Внешние стены (±13м)
+            ( 0.0,  13.0,  13.0,  0.15),
+            ( 0.0, -13.0,  13.0,  0.15),
+            ( 13.0,  0.0,  0.15, 13.0),
+            (-13.0,  0.0,  0.15, 13.0),
             # barrier_A горизонт. y=5,  x от -3 до 5
             ( 1.0,  5.0,   4.0,  0.15),
             # barrier_B верт.    x=-6, y от -3 до 5
@@ -203,18 +266,24 @@ class CoverageNavigator(Node):
             gx1, gy1 = w2g(cx + hx, cy + hy)
             raw[gy0:gy1+1, gx0:gx1+1] = True
 
-        self._grid = inflate(raw, INFLATE_C)
+        self._grid      = inflate(raw, INFLATE_C)
+        self._cost_grid = make_cost_grid(self._grid)
 
     # ── Callback: клик в RViz ("2D Goal Pose") ───────────────────────────── #
 
     def _goal_pose_cb(self, msg: PoseStamped):
-        gx = msg.pose.position.x
-        gy = msg.pose.position.y
+        # RViz публикует в Fixed Frame = 'odom'. Переводим в мировые координаты.
+        ox = msg.pose.position.x
+        oy = msg.pose.position.y
+        x0 = self._odom_x0 if self._odom_x0 is not None else 0.0
+        y0 = self._odom_y0 if self._odom_y0 is not None else 0.0
+        gx = ox - x0
+        gy = oy - y0
         self._coverage_goals = [(gx, gy)]
         self._goal_idx = 0
         self._done_logged = False
         self._state = 'PLANNING' if self._odom_ok else 'WAIT_ODOM'
-        self.get_logger().info(f'[RViz] Цель: ({gx:.1f}, {gy:.1f})')
+        self.get_logger().info(f'[RViz] Цель odom=({ox:.1f},{oy:.1f}) → world=({gx:.1f},{gy:.1f})')
 
     # ── Callback: оператор задаёт область ─────────────────────────────────── #
 
@@ -225,10 +294,10 @@ class CoverageNavigator(Node):
 
         xs = [p.x for p in msg.points]
         ys = [p.y for p in msg.points]
-        x_min = max(min(xs), -MAP_HALF + AREA_MARGIN)
-        x_max = min(max(xs),  MAP_HALF - AREA_MARGIN)
-        y_min = max(min(ys), -MAP_HALF + AREA_MARGIN)
-        y_max = min(max(ys),  MAP_HALF - AREA_MARGIN)
+        x_min = max(min(xs), -MAP_HALF + self.area_margin)
+        x_max = min(max(xs),  MAP_HALF - self.area_margin)
+        y_min = max(min(ys), -MAP_HALF + self.area_margin)
+        y_max = min(max(ys),  MAP_HALF - self.area_margin)
 
         if x_max - x_min < 1.0 or y_max - y_min < 1.0:
             self.get_logger().warn('scan_area: слишком маленькая область!')
@@ -246,9 +315,9 @@ class CoverageNavigator(Node):
     def _boustrophedon(self, x_min, y_min, x_max, y_max):
         """Зигзаг-маршрут по области."""
         goals = []
-        y = y_min + ROW_SPACING / 2.0
+        y = y_min + self.row_spacing / 2.0
         left_to_right = True
-        while y <= y_max + ROW_SPACING * 0.1:
+        while y <= y_max + self.row_spacing * 0.1:
             y_clamped = min(y, y_max)
             if left_to_right:
                 goals.append((x_min, y_clamped))
@@ -256,21 +325,69 @@ class CoverageNavigator(Node):
             else:
                 goals.append((x_max, y_clamped))
                 goals.append((x_min, y_clamped))
-            y += ROW_SPACING
+            y += self.row_spacing
             left_to_right = not left_to_right
         return goals
 
     # ── Callbacks ────────────────────────────────────────────────────────── #
 
     def _odom_cb(self, msg: Odometry):
-        self._x   = msg.pose.pose.position.x
-        self._y   = msg.pose.pose.position.y
+        ox = msg.pose.pose.position.x
+        oy = msg.pose.pose.position.y
+
+        # При первом пакете вычисляем смещение odom→world.
+        # DiffDrive в Gazebo Harmonic может стартовать как с (0,0), так и с мировой позицией.
+        # Независимо от поведения: world = odom - (first_odom - spawn)
+        if self._odom_x0 is None:
+            self._odom_x0 = ox - self._spawn_x
+            self._odom_y0 = oy - self._spawn_y
+            self.get_logger().info(
+                f'Odom offset: ({self._odom_x0:.3f}, {self._odom_y0:.3f}), '
+                f'spawn=({self._spawn_x}, {self._spawn_y}), '
+                f'first_odom=({ox:.3f}, {oy:.3f})'
+            )
+
+        self._x   = ox - self._odom_x0
+        self._y   = oy - self._odom_y0
         q         = msg.pose.pose.orientation
         self._yaw = math.atan2(
             2.0*(q.w*q.z + q.x*q.y),
             1.0 - 2.0*(q.y*q.y + q.z*q.z),
         )
         self._odom_ok = True
+
+    # ── Детектор застревания ─────────────────────────────────────────────── #
+
+    def _check_stuck(self) -> bool:
+        """Возвращает True если уже обрабатываем застревание (движение назад)."""
+        now = time.time()
+
+        # Активный откат назад
+        if self._backing:
+            if now - self._t_back < self._BACK_DURATION:
+                cmd = Twist()
+                cmd.linear.x = -0.25
+                self._pub.publish(cmd)
+                return True
+            else:
+                self._backing = False
+                self._state = 'PLANNING'   # перепланировать после отката
+                self._stop()
+                return False
+
+        # Проверяем, сдвинулся ли робот
+        if math.hypot(self._x - self._stuck_x, self._y - self._stuck_y) > self._STUCK_DIST:
+            self._stuck_x = self._x
+            self._stuck_y = self._y
+            self._t_stuck = now
+
+        if now - self._t_stuck > self._STUCK_TIMEOUT and self._state == 'FOLLOWING':
+            self.get_logger().warn('Застрял! Сдаю назад...')
+            self._backing = True
+            self._t_back  = now
+            return True
+
+        return False
 
     # ── Главный цикл ─────────────────────────────────────────────────────── #
 
@@ -298,7 +415,10 @@ class CoverageNavigator(Node):
                 self._goal_idx += 1
 
         elif self._state == 'FOLLOWING':
-            if time.time() - self._t_start > GOAL_TIMEOUT:
+            if self._check_stuck():
+                return
+
+            if time.time() - self._t_start > self.goal_timeout:
                 self.get_logger().warn(f'Таймаут точки {self._goal_idx}, пропускаю.')
                 self._goal_idx += 1
                 self._state = 'PLANNING'
@@ -308,13 +428,13 @@ class CoverageNavigator(Node):
             gx_w, gy_w = self._coverage_goals[self._goal_idx]
             dist = math.hypot(gx_w - self._x, gy_w - self._y)
 
-            if dist < GOAL_R:
+            if dist < self.goal_r:
                 self._goal_idx += 1
                 self._state = 'PLANNING'
                 self._stop()
                 return
 
-            if dist < LOOKAHEAD:
+            if dist < self.lookahead:
                 self._direct_approach(gx_w, gy_w, dist)
             else:
                 lx, ly = self._get_lookahead()
@@ -337,7 +457,7 @@ class CoverageNavigator(Node):
         start = w2g(self._x, self._y)
         goal  = w2g(gx_w, gy_w)
 
-        path_grid = astar(self._grid, start, goal)
+        path_grid = astar(self._grid, start, goal, self._cost_grid)
         if path_grid is None:
             return False
 
@@ -345,14 +465,32 @@ class CoverageNavigator(Node):
         wpts.append((gx_w, gy_w))
         self._path   = wpts
         self._wp_idx = 0
+        self._publish_path(wpts)
         return True
+
+    def _publish_path(self, wpts):
+        """Публикует запланированный маршрут в /nav_path для отображения в RViz."""
+        x0 = self._odom_x0 if self._odom_x0 is not None else 0.0
+        y0 = self._odom_y0 if self._odom_y0 is not None else 0.0
+        msg = Path()
+        msg.header.stamp    = self.get_clock().now().to_msg()
+        msg.header.frame_id = 'odom'
+        for wx, wy in wpts:
+            ps = PoseStamped()
+            ps.header = msg.header
+            # Переводим world → odom для отображения в Fixed Frame
+            ps.pose.position.x = wx + x0
+            ps.pose.position.y = wy + y0
+            ps.pose.orientation.w = 1.0
+            msg.poses.append(ps)
+        self._path_pub.publish(msg)
 
     # ── Pure Pursuit ─────────────────────────────────────────────────────── #
 
     def _get_lookahead(self) -> tuple[float, float]:
         while self._wp_idx < len(self._path) - 1:
             wx, wy = self._path[self._wp_idx]
-            if math.hypot(wx - self._x, wy - self._y) < WAYPOINT_R:
+            if math.hypot(wx - self._x, wy - self._y) < self.waypoint_r:
                 self._wp_idx += 1
             else:
                 break
@@ -362,8 +500,8 @@ class CoverageNavigator(Node):
         for i in range(self._wp_idx, len(self._path)):
             wx, wy = self._path[i]
             seg = math.hypot(wx - px, wy - py)
-            if cum + seg >= LOOKAHEAD:
-                t = (LOOKAHEAD - cum) / seg if seg > 1e-6 else 0.0
+            if cum + seg >= self.lookahead:
+                t = (self.lookahead - cum) / seg if seg > 1e-6 else 0.0
                 return (px + t*(wx-px), py + t*(wy-py))
             cum += seg
             px, py = wx, wy
@@ -374,21 +512,22 @@ class CoverageNavigator(Node):
         err  = adiff(math.atan2(ty - self._y, tx - self._x), self._yaw)
         cmd  = Twist()
         if abs(err) > math.radians(60):
-            cmd.angular.z = float(np.clip(1.2 * math.copysign(1.0, err), -MAX_ANG, MAX_ANG))
+            cmd.angular.z = float(np.clip(1.2 * math.copysign(1.0, err), -self.max_ang, self.max_ang))
         else:
             k = math.cos(err) ** 2
-            cmd.linear.x  = float(np.clip(MAX_LIN * k * min(1.0, dist/LOOKAHEAD), 0.1, MAX_LIN))
-            cmd.angular.z = float(np.clip(1.4 * err, -MAX_ANG, MAX_ANG))
+            cmd.linear.x  = float(np.clip(self.max_lin * k * min(1.0, dist/self.lookahead), 0.1, self.max_lin))
+            cmd.angular.z = float(np.clip(1.4 * err, -self.max_ang, self.max_ang))
         self._pub.publish(cmd)
 
     def _direct_approach(self, tx, ty, dist):
         err = adiff(math.atan2(ty - self._y, tx - self._x), self._yaw)
         cmd = Twist()
+        ang_lim = min(0.7, self.max_ang)
         if abs(err) > math.radians(80):
-            cmd.angular.z = float(np.clip(0.65 * math.copysign(1.0, err), -0.7, 0.7))
+            cmd.angular.z = float(np.clip(0.65 * math.copysign(1.0, err), -ang_lim, ang_lim))
         else:
             cmd.linear.x  = float(np.clip(0.45 * dist, 0.08, 0.4))
-            cmd.angular.z = float(np.clip(0.9 * err,   -0.7, 0.7))
+            cmd.angular.z = float(np.clip(0.9 * err,   -ang_lim, ang_lim))
         self._pub.publish(cmd)
 
     def _stop(self):

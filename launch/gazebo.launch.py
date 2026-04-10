@@ -3,16 +3,19 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, SetEnvironmentVariable
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, Command
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
     pkg      = get_package_share_directory('trash_robot_sim')
     gz_pkg   = get_package_share_directory('ros_gz_sim')
 
-    world_file = os.path.join(pkg, 'worlds', 'trash_world.sdf')
-    robot_sdf  = os.path.join(pkg, 'models', 'robot', 'only_robot.sdf')
+    world_file  = os.path.join(pkg, 'worlds',  'trash_world.sdf')
+    robot_sdf   = os.path.join(pkg, 'models',  'robot', 'only_robot.sdf')
+    robot_xacro = os.path.join(pkg, 'urdf',    'trash_robot.urdf.xacro')
+    params_file = os.path.join(pkg, 'config',  'params.yaml')
 
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
     run_nav      = LaunchConfiguration('run_nav',      default='true')
@@ -68,13 +71,30 @@ def generate_launch_description():
         output='screen',
     )
 
+    # robot_state_publisher — публикует /robot_description и TF суставов
+    # (нужен RViz для отображения модели робота)
+    robot_description = ParameterValue(
+        Command(['xacro ', robot_xacro]),
+        value_type=str,
+    )
+    robot_state_pub = Node(
+        package='robot_state_publisher',
+        executable='robot_state_publisher',
+        name='robot_state_publisher',
+        parameters=[
+            {'robot_description': robot_description},
+            {'use_sim_time': use_sim_time},
+        ],
+        output='screen',
+    )
+
     # A* навигатор — use_sim_time=False чтобы таймер шёл по wall-clock,
     # иначе при паузе Gazebo таймер замирает и cmd_vel не публикуется.
     navigator = Node(
         package='trash_robot_sim',
         executable='navigator.py',
         name='astar_navigator',
-        parameters=[{'use_sim_time': False}],
+        parameters=[params_file, {'use_sim_time': False}],
         output='screen',
     )
 
@@ -83,7 +103,7 @@ def generate_launch_description():
         package='trash_robot_sim',
         executable='map_builder.py',
         name='map_builder',
-        parameters=[{'use_sim_time': False}],
+        parameters=[params_file, {'use_sim_time': False}],
         output='screen',
     )
 
@@ -96,6 +116,7 @@ def generate_launch_description():
         gazebo,
         spawn,
         bridge,
+        robot_state_pub,
         navigator,
         map_builder,
     ])

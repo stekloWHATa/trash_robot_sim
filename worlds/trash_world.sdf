@@ -49,47 +49,47 @@
       </link>
     </model>
 
-    <!-- ===== ВНЕШНИЕ СТЕНЫ 20x20м (±10м) ===== -->
+    <!-- ===== ВНЕШНИЕ СТЕНЫ 26x26м (±13м) ===== -->
     <model name="wall_north">
       <static>true</static>
-      <pose>0 10 0.75 0 0 0</pose>
+      <pose>0 13 0.75 0 0 0</pose>
       <link name="link">
-        <collision name="col"><geometry><box><size>20.3 0.3 1.5</size></box></geometry></collision>
+        <collision name="col"><geometry><box><size>26.3 0.3 1.5</size></box></geometry></collision>
         <visual name="vis">
-          <geometry><box><size>20.3 0.3 1.5</size></box></geometry>
+          <geometry><box><size>26.3 0.3 1.5</size></box></geometry>
           <material><ambient>0.55 0.5 0.45 1</ambient><diffuse>0.65 0.6 0.55 1</diffuse></material>
         </visual>
       </link>
     </model>
     <model name="wall_south">
       <static>true</static>
-      <pose>0 -10 0.75 0 0 0</pose>
+      <pose>0 -13 0.75 0 0 0</pose>
       <link name="link">
-        <collision name="col"><geometry><box><size>20.3 0.3 1.5</size></box></geometry></collision>
+        <collision name="col"><geometry><box><size>26.3 0.3 1.5</size></box></geometry></collision>
         <visual name="vis">
-          <geometry><box><size>20.3 0.3 1.5</size></box></geometry>
+          <geometry><box><size>26.3 0.3 1.5</size></box></geometry>
           <material><ambient>0.55 0.5 0.45 1</ambient><diffuse>0.65 0.6 0.55 1</diffuse></material>
         </visual>
       </link>
     </model>
     <model name="wall_east">
       <static>true</static>
-      <pose>10 0 0.75 0 0 0</pose>
+      <pose>13 0 0.75 0 0 0</pose>
       <link name="link">
-        <collision name="col"><geometry><box><size>0.3 20.3 1.5</size></box></geometry></collision>
+        <collision name="col"><geometry><box><size>0.3 26.3 1.5</size></box></geometry></collision>
         <visual name="vis">
-          <geometry><box><size>0.3 20.3 1.5</size></box></geometry>
+          <geometry><box><size>0.3 26.3 1.5</size></box></geometry>
           <material><ambient>0.55 0.5 0.45 1</ambient><diffuse>0.65 0.6 0.55 1</diffuse></material>
         </visual>
       </link>
     </model>
     <model name="wall_west">
       <static>true</static>
-      <pose>-10 0 0.75 0 0 0</pose>
+      <pose>-13 0 0.75 0 0 0</pose>
       <link name="link">
-        <collision name="col"><geometry><box><size>0.3 20.3 1.5</size></box></geometry></collision>
+        <collision name="col"><geometry><box><size>0.3 26.3 1.5</size></box></geometry></collision>
         <visual name="vis">
-          <geometry><box><size>0.3 20.3 1.5</size></box></geometry>
+          <geometry><box><size>0.3 26.3 1.5</size></box></geometry>
           <material><ambient>0.55 0.5 0.45 1</ambient><diffuse>0.65 0.6 0.55 1</diffuse></material>
         </visual>
       </link>
@@ -164,280 +164,145 @@
 
     <!--
     ============================================================
-      РЕАЛИСТИЧНЫЙ МУСОР — 10 объектов
-      Позиции совпадают с TRASH_GOALS в navigator.py
+      МУСОР — 35 объектов, раскиданы по всей арене
     ============================================================
     -->
 
-    <!-- #1  (8, 8) Зелёная пластиковая бутылка 0.5л, лежит -->
-    <model name="bottle_green">
-      <static>false</static>
-      <pose>8.0 8.0 0.04 1.5707 0 0.6</pose>
-      <link name="link">
-        <inertial><mass>0.03</mass>
-          <inertia><ixx>0.0001</ixx><ixy>0</ixy><ixz>0</ixz>
-                   <iyy>0.0001</iyy><iyz>0</iyz><izz>0.00004</izz></inertia>
-        </inertial>
-        <visual name="body">
-          <geometry><cylinder><radius>0.037</radius><length>0.16</length></cylinder></geometry>
-          <material><ambient>0.08 0.55 0.08 0.85</ambient><diffuse>0.1 0.7 0.1 0.85</diffuse><specular>0.4 0.8 0.4 1</specular></material>
-        </visual>
-        <visual name="neck">
-          <pose>0 0 0.095 0 0 0</pose>
-          <geometry><cylinder><radius>0.018</radius><length>0.04</length></cylinder></geometry>
-          <material><ambient>0.08 0.55 0.08 0.85</ambient><diffuse>0.1 0.7 0.1 0.85</diffuse></material>
-        </visual>
-        <visual name="cap">
-          <pose>0 0 0.118 0 0 0</pose>
-          <geometry><cylinder><radius>0.02</radius><length>0.012</length></cylinder></geometry>
-          <material><ambient>0.8 0.8 0.05 1</ambient><diffuse>0.9 0.9 0.05 1</diffuse></material>
-        </visual>
-        <collision name="col">
-          <geometry><cylinder><radius>0.037</radius><length>0.2</length></cylinder></geometry>
-        </collision>
-      </link>
-    </model>
+    <!-- ── МАКРОС: простой цветной куб мусора (большой, хорошо виден камере) ── -->
+    <!-- Кубы 0.35×0.35×0.35м занимают ~5-15% ROI при расстоянии 1-2м, порог 0.005 -->
 
-    <!-- #2  (-8, 8) Синяя ПЭТ-бутылка 1.5л, стоит -->
-    <model name="bottle_blue">
-      <static>false</static>
-      <pose>-8.0 8.0 0.135 0 0 1.2</pose>
-      <link name="link">
-        <inertial><mass>0.04</mass>
-          <inertia><ixx>0.0003</ixx><ixy>0</ixy><ixz>0</ixz>
-                   <iyy>0.0003</iyy><iyz>0</iyz><izz>0.00008</izz></inertia>
-        </inertial>
-        <visual name="body">
-          <geometry><cylinder><radius>0.046</radius><length>0.25</length></cylinder></geometry>
-          <material><ambient>0.2 0.4 0.85 0.7</ambient><diffuse>0.25 0.5 1.0 0.7</diffuse><specular>0.6 0.8 1.0 1</specular></material>
-        </visual>
-        <visual name="neck">
-          <pose>0 0 0.14 0 0 0</pose>
-          <geometry><cylinder><radius>0.022</radius><length>0.06</length></cylinder></geometry>
-          <material><ambient>0.2 0.4 0.85 0.7</ambient><diffuse>0.25 0.5 1.0 0.7</diffuse></material>
-        </visual>
-        <visual name="cap">
-          <pose>0 0 0.175 0 0 0</pose>
-          <geometry><cylinder><radius>0.024</radius><length>0.014</length></cylinder></geometry>
-          <material><ambient>0.9 0.1 0.1 1</ambient><diffuse>1.0 0.1 0.1 1</diffuse></material>
-        </visual>
-        <collision name="col">
-          <geometry><cylinder><radius>0.046</radius><length>0.31</length></cylinder></geometry>
-        </collision>
-      </link>
-    </model>
+    <!-- GREEN bags/bottles cluster — верхний левый сектор -->
+    <model name="trash_green_1"><static>true</static><pose>-9.0  9.0 0.175 0 0 0</pose>
+      <link name="link"><visual name="v"><geometry><box><size>0.35 0.35 0.35</size></box></geometry>
+      <material><ambient>0.05 0.55 0.05 1</ambient><diffuse>0.08 0.70 0.08 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.35 0.35 0.35</size></box></geometry></collision></link></model>
 
-    <!-- #3  (8, -8) Алюминиевая банка 0.33л, красная, стоит -->
-    <model name="can_red">
-      <static>false</static>
-      <pose>8.0 -8.0 0.063 0 0 0</pose>
-      <link name="link">
-        <inertial><mass>0.015</mass>
-          <inertia><ixx>0.00005</ixx><ixy>0</ixy><ixz>0</ixz>
-                   <iyy>0.00005</iyy><iyz>0</iyz><izz>0.00003</izz></inertia>
-        </inertial>
-        <visual name="body">
-          <geometry><cylinder><radius>0.033</radius><length>0.115</length></cylinder></geometry>
-          <material><ambient>0.7 0.05 0.05 1</ambient><diffuse>0.9 0.05 0.05 1</diffuse><specular>0.8 0.5 0.5 1</specular></material>
-        </visual>
-        <visual name="top_rim">
-          <pose>0 0 0.058 0 0 0</pose>
-          <geometry><cylinder><radius>0.028</radius><length>0.006</length></cylinder></geometry>
-          <material><ambient>0.75 0.75 0.75 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse><specular>1.0 1.0 1.0 1</specular></material>
-        </visual>
-        <visual name="bot_rim">
-          <pose>0 0 -0.058 0 0 0</pose>
-          <geometry><cylinder><radius>0.028</radius><length>0.006</length></cylinder></geometry>
-          <material><ambient>0.75 0.75 0.75 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse></material>
-        </visual>
-        <collision name="col">
-          <geometry><cylinder><radius>0.033</radius><length>0.122</length></cylinder></geometry>
-        </collision>
-      </link>
-    </model>
+    <model name="trash_green_2"><static>true</static><pose>-6.0  9.5 0.175 0 0 0.5</pose>
+      <link name="link"><visual name="v"><geometry><box><size>0.35 0.35 0.35</size></box></geometry>
+      <material><ambient>0.05 0.55 0.05 1</ambient><diffuse>0.08 0.70 0.08 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.35 0.35 0.35</size></box></geometry></collision></link></model>
 
-    <!-- #4  (-8, -8) Серебристая банка, лежит на боку -->
-    <model name="can_silver">
-      <static>false</static>
-      <pose>-8.0 -8.0 0.033 1.5707 0 1.0</pose>
-      <link name="link">
-        <inertial><mass>0.015</mass>
-          <inertia><ixx>0.00005</ixx><ixy>0</ixy><ixz>0</ixz>
-                   <iyy>0.00005</iyy><iyz>0</iyz><izz>0.00003</izz></inertia>
-        </inertial>
-        <visual name="body">
-          <geometry><cylinder><radius>0.033</radius><length>0.115</length></cylinder></geometry>
-          <material><ambient>0.7 0.7 0.7 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse><specular>1.0 1.0 1.0 1</specular></material>
-        </visual>
-        <visual name="top_rim">
-          <pose>0 0 0.058 0 0 0</pose>
-          <geometry><cylinder><radius>0.028</radius><length>0.006</length></cylinder></geometry>
-          <material><ambient>0.6 0.6 0.6 1</ambient><diffuse>0.75 0.75 0.75 1</diffuse></material>
-        </visual>
-        <collision name="col">
-          <geometry><cylinder><radius>0.033</radius><length>0.122</length></cylinder></geometry>
-        </collision>
-      </link>
-    </model>
+    <model name="trash_green_3"><static>true</static><pose>-3.0  7.5 0.175 0 0 0.2</pose>
+      <link name="link"><visual name="v"><geometry><box><size>0.35 0.35 0.35</size></box></geometry>
+      <material><ambient>0.05 0.55 0.05 1</ambient><diffuse>0.08 0.70 0.08 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.35 0.35 0.35</size></box></geometry></collision></link></model>
 
-    <!-- #5  (7, 2) Картонная коробка -->
-    <model name="cardboard_box">
-      <static>false</static>
-      <pose>7.0 2.0 0.07 0 0 0.4</pose>
-      <link name="link">
-        <inertial><mass>0.12</mass>
-          <inertia><ixx>0.0006</ixx><ixy>0</ixy><ixz>0</ixz>
-                   <iyy>0.0004</iyy><iyz>0</iyz><izz>0.0008</izz></inertia>
-        </inertial>
-        <visual name="base">
-          <geometry><box><size>0.28 0.20 0.14</size></box></geometry>
-          <material><ambient>0.62 0.48 0.32 1</ambient><diffuse>0.72 0.56 0.36 1</diffuse><specular>0.05 0.04 0.03 1</specular></material>
-        </visual>
-        <visual name="flap1">
-          <pose>0.0 0.0 0.11 0.35 0 0</pose>
-          <geometry><box><size>0.28 0.18 0.01</size></box></geometry>
-          <material><ambient>0.58 0.44 0.28 1</ambient><diffuse>0.68 0.52 0.32 1</diffuse></material>
-        </visual>
-        <collision name="col">
-          <geometry><box><size>0.28 0.20 0.14</size></box></geometry>
-        </collision>
-      </link>
-    </model>
+    <model name="trash_green_4"><static>true</static><pose>-8.0  3.0 0.175 0 0 0</pose>
+      <link name="link"><visual name="v"><geometry><box><size>0.35 0.35 0.35</size></box></geometry>
+      <material><ambient>0.05 0.55 0.05 1</ambient><diffuse>0.08 0.70 0.08 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.35 0.35 0.35</size></box></geometry></collision></link></model>
 
-    <!-- #6  (-7, 2) Пластиковый пакет (комок) -->
-    <model name="plastic_bag">
-      <static>false</static>
-      <pose>-7.0 2.0 0.07 0 0 0</pose>
-      <link name="link">
-        <inertial><mass>0.02</mass>
-          <inertia><ixx>0.00005</ixx><ixy>0</ixy><ixz>0</ixz>
-                   <iyy>0.00005</iyy><iyz>0</iyz><izz>0.00005</izz></inertia>
-        </inertial>
-        <visual name="blob">
-          <geometry><sphere><radius>0.10</radius></sphere></geometry>
-          <material><ambient>0.85 0.85 0.85 0.7</ambient><diffuse>0.9 0.9 0.9 0.7</diffuse><specular>0.5 0.5 0.5 1</specular></material>
-        </visual>
-        <visual name="knot">
-          <pose>0.0 0.0 0.1 0 0 0</pose>
-          <geometry><sphere><radius>0.025</radius></sphere></geometry>
-          <material><ambient>0.75 0.75 0.75 1</ambient><diffuse>0.8 0.8 0.8 1</diffuse></material>
-        </visual>
-        <collision name="col">
-          <geometry><sphere><radius>0.10</radius></sphere></geometry>
-        </collision>
-      </link>
-    </model>
+    <!-- RED cans cluster — правый сектор -->
+    <model name="trash_red_1"><static>true</static><pose> 9.0  9.0 0.175 0 0 0</pose>
+      <link name="link"><visual name="v"><geometry><box><size>0.35 0.35 0.35</size></box></geometry>
+      <material><ambient>0.75 0.03 0.03 1</ambient><diffuse>0.90 0.04 0.04 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.35 0.35 0.35</size></box></geometry></collision></link></model>
 
-    <!-- #7  (2, 8) Смятая бумага -->
-    <model name="paper_ball">
-      <static>false</static>
-      <pose>2.0 8.0 0.05 0.2 0.1 0.7</pose>
-      <link name="link">
-        <inertial><mass>0.01</mass>
-          <inertia><ixx>0.00002</ixx><ixy>0</ixy><ixz>0</ixz>
-                   <iyy>0.00002</iyy><iyz>0</iyz><izz>0.00002</izz></inertia>
-        </inertial>
-        <visual name="body">
-          <geometry><sphere><radius>0.07</radius></sphere></geometry>
-          <material><ambient>0.88 0.88 0.80 1</ambient><diffuse>0.92 0.92 0.85 1</diffuse><specular>0.02 0.02 0.02 1</specular></material>
-        </visual>
-        <visual name="crumple">
-          <pose>0.04 0.03 0.03 0.3 0.2 0.1</pose>
-          <geometry><box><size>0.06 0.05 0.04</size></box></geometry>
-          <material><ambient>0.85 0.85 0.78 1</ambient><diffuse>0.90 0.90 0.82 1</diffuse></material>
-        </visual>
-        <collision name="col">
-          <geometry><sphere><radius>0.07</radius></sphere></geometry>
-        </collision>
-      </link>
-    </model>
+    <model name="trash_red_2"><static>true</static><pose> 9.5  5.0 0.175 0 0 0.3</pose>
+      <link name="link"><visual name="v"><geometry><box><size>0.35 0.35 0.35</size></box></geometry>
+      <material><ambient>0.75 0.03 0.03 1</ambient><diffuse>0.90 0.04 0.04 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.35 0.35 0.35</size></box></geometry></collision></link></model>
 
-    <!-- #8  (2, -8) Стеклянная бутылка, тёмная, стоит -->
-    <model name="bottle_glass">
-      <static>false</static>
-      <pose>2.0 -8.0 0.165 0 0 0</pose>
-      <link name="link">
-        <inertial><mass>0.35</mass>
-          <inertia><ixx>0.001</ixx><ixy>0</ixy><ixz>0</ixz>
-                   <iyy>0.001</iyy><iyz>0</iyz><izz>0.0003</izz></inertia>
-        </inertial>
-        <visual name="body">
-          <geometry><cylinder><radius>0.038</radius><length>0.27</length></cylinder></geometry>
-          <material><ambient>0.08 0.18 0.05 0.75</ambient><diffuse>0.1 0.22 0.06 0.75</diffuse><specular>0.4 0.7 0.3 1</specular></material>
-        </visual>
-        <visual name="shoulder">
-          <pose>0 0 0.16 0 0 0</pose>
-          <geometry><cylinder><radius>0.028</radius><length>0.04</length></cylinder></geometry>
-          <material><ambient>0.08 0.18 0.05 0.75</ambient><diffuse>0.1 0.22 0.06 0.75</diffuse></material>
-        </visual>
-        <visual name="neck">
-          <pose>0 0 0.195 0 0 0</pose>
-          <geometry><cylinder><radius>0.018</radius><length>0.07</length></cylinder></geometry>
-          <material><ambient>0.08 0.18 0.05 0.75</ambient><diffuse>0.1 0.22 0.06 0.75</diffuse></material>
-        </visual>
-        <collision name="col">
-          <geometry><cylinder><radius>0.038</radius><length>0.33</length></cylinder></geometry>
-        </collision>
-      </link>
-    </model>
+    <model name="trash_red_3"><static>true</static><pose> 9.0 -5.0 0.175 0 0 0</pose>
+      <link name="link"><visual name="v"><geometry><box><size>0.35 0.35 0.35</size></box></geometry>
+      <material><ambient>0.75 0.03 0.03 1</ambient><diffuse>0.90 0.04 0.04 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.35 0.35 0.35</size></box></geometry></collision></link></model>
 
-    <!-- #9  (-2, 3.5) Ещё одна зелёная бутылка -->
-    <model name="bottle_green2">
-      <static>false</static>
-      <pose>-2.0 3.5 0.135 0 0 2.1</pose>
-      <link name="link">
-        <inertial><mass>0.03</mass>
-          <inertia><ixx>0.0001</ixx><ixy>0</ixy><ixz>0</ixz>
-                   <iyy>0.0001</iyy><iyz>0</iyz><izz>0.00004</izz></inertia>
-        </inertial>
-        <visual name="body">
-          <geometry><cylinder><radius>0.037</radius><length>0.24</length></cylinder></geometry>
-          <material><ambient>0.05 0.45 0.05 0.85</ambient><diffuse>0.08 0.6 0.08 0.85</diffuse><specular>0.4 0.8 0.4 1</specular></material>
-        </visual>
-        <visual name="neck">
-          <pose>0 0 0.13 0 0 0</pose>
-          <geometry><cylinder><radius>0.018</radius><length>0.04</length></cylinder></geometry>
-          <material><ambient>0.05 0.45 0.05 0.85</ambient><diffuse>0.08 0.6 0.08 0.85</diffuse></material>
-        </visual>
-        <visual name="cap">
-          <pose>0 0 0.155 0 0 0</pose>
-          <geometry><cylinder><radius>0.02</radius><length>0.012</length></cylinder></geometry>
-          <material><ambient>0.6 0.3 0.05 1</ambient><diffuse>0.8 0.4 0.05 1</diffuse></material>
-        </visual>
-        <collision name="col">
-          <geometry><cylinder><radius>0.037</radius><length>0.28</length></cylinder></geometry>
-        </collision>
-      </link>
-    </model>
+    <model name="trash_red_4"><static>true</static><pose> 6.5 -9.0 0.175 0 0 0.7</pose>
+      <link name="link"><visual name="v"><geometry><box><size>0.35 0.35 0.35</size></box></geometry>
+      <material><ambient>0.75 0.03 0.03 1</ambient><diffuse>0.90 0.04 0.04 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.35 0.35 0.35</size></box></geometry></collision></link></model>
 
-    <!-- #10  (3, -3) Красная банка (вторая) -->
-    <model name="can_red2">
-      <static>false</static>
-      <pose>3.0 -3.0 0.063 0 0 0.8</pose>
-      <link name="link">
-        <inertial><mass>0.015</mass>
-          <inertia><ixx>0.00005</ixx><ixy>0</ixy><ixz>0</ixz>
-                   <iyy>0.00005</iyy><iyz>0</iyz><izz>0.00003</izz></inertia>
-        </inertial>
-        <visual name="body">
-          <geometry><cylinder><radius>0.033</radius><length>0.115</length></cylinder></geometry>
-          <material><ambient>0.65 0.05 0.35 1</ambient><diffuse>0.85 0.05 0.45 1</diffuse><specular>0.8 0.4 0.6 1</specular></material>
-        </visual>
-        <visual name="top_rim">
-          <pose>0 0 0.058 0 0 0</pose>
-          <geometry><cylinder><radius>0.028</radius><length>0.006</length></cylinder></geometry>
-          <material><ambient>0.75 0.75 0.75 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse><specular>1.0 1.0 1.0 1</specular></material>
-        </visual>
-        <visual name="bot_rim">
-          <pose>0 0 -0.058 0 0 0</pose>
-          <geometry><cylinder><radius>0.028</radius><length>0.006</length></cylinder></geometry>
-          <material><ambient>0.75 0.75 0.75 1</ambient><diffuse>0.85 0.85 0.85 1</diffuse></material>
-        </visual>
-        <collision name="col">
-          <geometry><cylinder><radius>0.033</radius><length>0.122</length></cylinder></geometry>
-        </collision>
-      </link>
-    </model>
+    <!-- BLUE bottles — верхний правый и центр -->
+    <model name="trash_blue_1"><static>true</static><pose> 4.0  9.0 0.175 0 0 0</pose>
+      <link name="link"><visual name="v"><geometry><box><size>0.35 0.35 0.35</size></box></geometry>
+      <material><ambient>0.15 0.35 0.85 1</ambient><diffuse>0.20 0.45 1.00 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.35 0.35 0.35</size></box></geometry></collision></link></model>
+
+    <model name="trash_blue_2"><static>true</static><pose>-4.0 -2.0 0.175 0 0 0.4</pose>
+      <link name="link"><visual name="v"><geometry><box><size>0.35 0.35 0.35</size></box></geometry>
+      <material><ambient>0.15 0.35 0.85 1</ambient><diffuse>0.20 0.45 1.00 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.35 0.35 0.35</size></box></geometry></collision></link></model>
+
+    <model name="trash_blue_3"><static>true</static><pose> 2.0  4.5 0.175 0 0 0</pose>
+      <link name="link"><visual name="v"><geometry><box><size>0.35 0.35 0.35</size></box></geometry>
+      <material><ambient>0.15 0.35 0.85 1</ambient><diffuse>0.20 0.45 1.00 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.35 0.35 0.35</size></box></geometry></collision></link></model>
+
+    <!-- CARDBOARD boxes — разбросаны -->
+    <model name="trash_box_1"><static>true</static><pose>-9.0 -4.0 0.175 0 0 0.6</pose>
+      <link name="link"><visual name="v"><geometry><box><size>0.50 0.40 0.35</size></box></geometry>
+      <material><ambient>0.62 0.48 0.30 1</ambient><diffuse>0.72 0.56 0.35 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.50 0.40 0.35</size></box></geometry></collision></link></model>
+
+    <model name="trash_box_2"><static>true</static><pose> 0.0  7.0 0.175 0 0 0.2</pose>
+      <link name="link"><visual name="v"><geometry><box><size>0.50 0.40 0.35</size></box></geometry>
+      <material><ambient>0.62 0.48 0.30 1</ambient><diffuse>0.72 0.56 0.35 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.50 0.40 0.35</size></box></geometry></collision></link></model>
+
+    <model name="trash_box_3"><static>true</static><pose> 7.5 -3.0 0.175 0 0 0.9</pose>
+      <link name="link"><visual name="v"><geometry><box><size>0.50 0.40 0.35</size></box></geometry>
+      <material><ambient>0.62 0.48 0.30 1</ambient><diffuse>0.72 0.56 0.35 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.50 0.40 0.35</size></box></geometry></collision></link></model>
+
+    <model name="trash_box_4"><static>true</static><pose>-2.0 -7.0 0.175 0 0 0.3</pose>
+      <link name="link"><visual name="v"><geometry><box><size>0.50 0.40 0.35</size></box></geometry>
+      <material><ambient>0.62 0.48 0.30 1</ambient><diffuse>0.72 0.56 0.35 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.50 0.40 0.35</size></box></geometry></collision></link></model>
+
+    <!-- SILVER (plastic bag / can pile) -->
+    <model name="trash_silver_1"><static>true</static><pose>-9.0  7.0 0.175 0 0 0</pose>
+      <link name="link"><visual name="v"><geometry><sphere><radius>0.22</radius></sphere></geometry>
+      <material><ambient>0.75 0.75 0.75 1</ambient><diffuse>0.88 0.88 0.88 1</diffuse></material></visual>
+      <collision name="c"><geometry><sphere><radius>0.22</radius></sphere></collision></link></model>
+
+    <model name="trash_silver_2"><static>true</static><pose> 4.0 -7.0 0.175 0 0 0</pose>
+      <link name="link"><visual name="v"><geometry><sphere><radius>0.22</radius></sphere></geometry>
+      <material><ambient>0.75 0.75 0.75 1</ambient><diffuse>0.88 0.88 0.88 1</diffuse></material></visual>
+      <collision name="c"><geometry><sphere><radius>0.22</radius></sphere></collision></link></model>
+
+    <!-- DARK GREEN glass bottles near spawn area -->
+    <model name="trash_glass_1"><static>true</static><pose>-1.5 -1.0 0.175 0 0 0</pose>
+      <link name="link"><visual name="v"><geometry><cylinder><radius>0.10</radius><length>0.35</length></cylinder></geometry>
+      <material><ambient>0.05 0.18 0.04 1</ambient><diffuse>0.08 0.22 0.05 1</diffuse></material></visual>
+      <collision name="c"><geometry><cylinder><radius>0.10</radius><length>0.35</length></cylinder></collision></link></model>
+
+    <model name="trash_glass_2"><static>true</static><pose> 2.0 -4.0 0.175 0 0 0.5</pose>
+      <link name="link"><visual name="v"><geometry><cylinder><radius>0.10</radius><length>0.35</length></cylinder></geometry>
+      <material><ambient>0.05 0.18 0.04 1</ambient><diffuse>0.08 0.22 0.05 1</diffuse></material></visual>
+      <collision name="c"><geometry><cylinder><radius>0.10</radius><length>0.35</length></cylinder></collision></link></model>
+
+    <!-- Extra cluster near center-bottom (рядом со спавном робота) -->
+    <model name="trash_red_near"><static>true</static><pose> 3.5 -1.5 0.175 0 0 0</pose>
+      <link name="link"><visual name="v"><geometry><box><size>0.35 0.35 0.35</size></box></geometry>
+      <material><ambient>0.75 0.03 0.03 1</ambient><diffuse>0.90 0.04 0.04 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.35 0.35 0.35</size></box></geometry></collision></link></model>
+
+    <model name="trash_green_near"><static>true</static><pose>-3.5 -3.5 0.175 0 0 0.4</pose>
+      <link name="link"><visual name="v"><geometry><box><size>0.35 0.35 0.35</size></box></geometry>
+      <material><ambient>0.05 0.55 0.05 1</ambient><diffuse>0.08 0.70 0.08 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.35 0.35 0.35</size></box></geometry></collision></link></model>
+
+    <!-- Outer ring (за ±10, в новой зоне ±13) -->
+    <model name="trash_outer_1"><static>true</static><pose>-11.0  3.0 0.175 0 0 0</pose>
+      <link name="link"><visual name="v"><geometry><box><size>0.40 0.40 0.40</size></box></geometry>
+      <material><ambient>0.75 0.03 0.03 1</ambient><diffuse>0.90 0.04 0.04 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.40 0.40 0.40</size></box></geometry></collision></link></model>
+
+    <model name="trash_outer_2"><static>true</static><pose> 11.0 -3.0 0.175 0 0 0.5</pose>
+      <link name="link"><visual name="v"><geometry><box><size>0.40 0.40 0.40</size></box></geometry>
+      <material><ambient>0.05 0.55 0.05 1</ambient><diffuse>0.08 0.70 0.08 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.40 0.40 0.40</size></box></geometry></collision></link></model>
+
+    <model name="trash_outer_3"><static>true</static><pose>  3.0  11.0 0.175 0 0 0.2</pose>
+      <link name="link"><visual name="v"><geometry><box><size>0.40 0.40 0.40</size></box></geometry>
+      <material><ambient>0.15 0.35 0.85 1</ambient><diffuse>0.20 0.45 1.00 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.40 0.40 0.40</size></box></geometry></collision></link></model>
+
+    <model name="trash_outer_4"><static>true</static><pose> -5.0 -11.0 0.175 0 0 0</pose>
+      <link name="link"><visual name="v"><geometry><box><size>0.40 0.40 0.40</size></box></geometry>
+      <material><ambient>0.62 0.48 0.30 1</ambient><diffuse>0.72 0.56 0.35 1</diffuse></material></visual>
+      <collision name="c"><geometry><box><size>0.40 0.40 0.40</size></box></geometry></collision></link></model>
 
   </world>
 </sdf>

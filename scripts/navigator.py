@@ -283,21 +283,21 @@ class CoverageNavigator(Node):
         self._scan_grid = inflate(raw, SCAN_INFLATE)
 
     def _next_wp_blocked(self) -> bool:
-        """True если следующий waypoint в пути попал в зону инфлированных лидарных препятствий.
-        Это значит путь физически заблокирован — надо перепланировать.
-        В отличие от _obstacle_ahead, не срабатывает просто на близкие стены/барьеры,
-        которые A* уже учёл при построении маршрута."""
+        """True если следующий waypoint попал в зону НОВОГО (динамического) препятствия.
+        Проверяем только scan_grid & ~static_grid: статические стены/барьеры A* уже знает,
+        срабатываем только на реально новые объекты на пути."""
         if self._wp_idx >= len(self._path):
             return False
         wx, wy = self._path[self._wp_idx]
         gx, gy = w2g(wx, wy)
-        blocked = bool(self._scan_grid[gy, gx])
-        if blocked:
+        # Только новые препятствия (не покрытые статической картой)
+        new_obs = bool(self._scan_grid[gy, gx] and not self._grid[gy, gx])
+        if new_obs:
             _flog.warning(
-                f'WAYPOINT BLOCKED: wp#{self._wp_idx} '
+                f'WAYPOINT BLOCKED (new obstacle): wp#{self._wp_idx} '
                 f'world=({wx:.2f},{wy:.2f}) grid=({gx},{gy}) → replan'
             )
-        return blocked
+        return new_obs
 
     def _log_status(self):
         """Периодический дамп состояния робота в файл (каждые 3с)."""
@@ -568,16 +568,21 @@ class CoverageNavigator(Node):
         start = w2g(self._x, self._y)
         goal  = w2g(gx_w, gy_w)
 
-        # Объединяем статическую карту со свежими лидарными препятствиями
-        combined = self._grid | self._scan_grid
+        # Добавляем к статической карте только НОВЫЕ препятствия из лидара.
+        # scan_grid содержит инфляцию всех видимых объектов (в т.ч. статических стен),
+        # поэтому маскируем статическую карту: берём только то, что не покрыто self._grid.
+        # Это предотвращает «переблокировку» A* от двойной инфляции барьеров/стен.
+        new_obstacles = self._scan_grid & ~self._grid
+        combined = self._grid | new_obstacles
         cost     = make_cost_grid(combined)
 
         scan_blocked = int(self._scan_grid.sum())
+        new_blocked  = int(new_obstacles.sum())
         _flog.info(
             f'PLAN #{self._goal_idx}: '
             f'from world=({self._x:.2f},{self._y:.2f}) grid={start} '
             f'→ world=({gx_w:.2f},{gy_w:.2f}) grid={goal} '
-            f'scan_blocked_cells={scan_blocked} '
+            f'scan_blocked={scan_blocked} new_only={new_blocked} '
             f'start_in_combined={bool(combined[start[1], start[0]])} '
             f'goal_in_combined={bool(combined[goal[1], goal[0]])}'
         )

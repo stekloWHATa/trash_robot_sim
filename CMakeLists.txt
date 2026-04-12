@@ -18,6 +18,7 @@ install(DIRECTORY
 install(PROGRAMS
   scripts/navigator.py
   scripts/map_builder.py
+  scripts/map_check.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

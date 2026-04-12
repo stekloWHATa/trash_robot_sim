@@ -83,6 +83,7 @@ class MapBuilder(Node):
 
         self._log_odds = np.zeros((GRID_N, GRID_N), dtype=np.float32)
         self._x = 0.0; self._y = 0.0; self._yaw = 0.0
+        self._angular_vel = 0.0   # рад/с — из odom.twist.angular.z
         self._odom_ok  = False
         self._last_scan: LaserScan | None = None
         # Смещение odom→world: вычисляется из первого пакета /odom
@@ -144,14 +145,27 @@ class MapBuilder(Node):
             2.0*(q.w*q.z + q.x*q.y),
             1.0 - 2.0*(q.y*q.y + q.z*q.z),
         )
+        self._angular_vel = msg.twist.twist.angular.z
         self._odom_ok = True
 
     # ── LaserScan → log-odds ─────────────────────────────────────────────── #
+
+    # Порог угловой скорости для пропуска скана.
+    # При повороте > 0.3 рад/с скан приходит с задержкой ~100мс относительно
+    # odom → yaw уже изменился на ~1.7°–5.2°, хит приземляется на 3–5 ячеек
+    # не туда → ложные занятые ячейки в свободном пространстве.
+    _MAX_ANG_FOR_SCAN = 0.3   # рад/с
 
     def _scan_cb(self, msg: LaserScan):
         if not self._odom_ok:
             return
         self._last_scan = msg
+
+        # Пропускаем обновление карты при активном повороте — угол в odom
+        # успевает измениться на несколько градусов за время задержки скана,
+        # что даёт ложные хиты в свободном пространстве.
+        if abs(self._angular_vel) > self._MAX_ANG_FOR_SCAN:
+            return
 
         ox, oy = self._w2g(self._x, self._y)
 
@@ -169,10 +183,6 @@ class MapBuilder(Node):
             ex_g, ey_g = self._w2g(ex, ey)
 
             for bx, by in self._bresenham(ox, oy, ex_g, ey_g):
-                # Останавливаемся перед уже уверенно занятой ячейкой:
-                # луч из другой стороны стены не должен «стирать» стену.
-                if self._log_odds[by, bx] > 2.0:
-                    break
                 self._log_odds[by, bx] = max(L_MIN, self._log_odds[by, bx] + L_FREE)
 
             if hit:

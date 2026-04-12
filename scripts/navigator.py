@@ -15,18 +15,32 @@ Coverage Navigator для trash_robot_sim.
 import math
 import heapq
 import time
+import logging
+import os
 
 import numpy as np
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Polygon, PoseStamped, Twist
 from nav_msgs.msg import Odometry, Path
+from sensor_msgs.msg import LaserScan
+
+# ── Файловый лог: /tmp/trash_nav.log (перезаписывается при каждом старте) ── #
+_LOG_PATH = '/tmp/trash_nav.log'
+logging.basicConfig(
+    filename=_LOG_PATH,
+    filemode='w',
+    level=logging.DEBUG,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%H:%M:%S',
+)
+_flog = logging.getLogger('nav')
 
 
 # ─── ПАРАМЕТРЫ КАРТЫ ─────────────────────────────────────────────────────── #
 RESOLUTION   = 0.25
-MAP_HALF     = 13.5
-GRID_N       = int(2 * MAP_HALF / RESOLUTION)   # 108
+MAP_HALF     = 13.0
+GRID_N       = int(2 * MAP_HALF / RESOLUTION)   # 104
 
 # Робот: тело 1.2×0.8м, полудиагональ 0.72м.
 # INFLATE_M = 1.50м (6 ячеек): жёсткий запрет — путь ≥1.50м от сырого препятствия.
@@ -34,7 +48,12 @@ GRID_N       = int(2 * MAP_HALF / RESOLUTION)   # 108
 #             стоят SOFT_K дороже. A* предпочтёт середину коридора, а не его край.
 # Результат: путь проходит по центру коридора, с запасом от стен.
 INFLATE_M    = 1.50
-INFLATE_C    = max(1, int(INFLATE_M / RESOLUTION))   # 6
+INFLATE_C    = max(1, int(INFLATE_M / RESOLUTION))   # 6 — для статической карты
+# Инфляция скана МЕНЬШЕ статической: существующие стены надуты на 1.5м,
+# поэтому лидарные хиты по ним не выйдут за статическую зону.
+# Только новые объекты (мусор) добавят блокировку.
+# 1.0м > полудиагональ робота 0.72м → достаточно для объезда.
+SCAN_INFLATE = 4           # 4 ячейки = 1.0м — инфляция динамических хитов
 SOFT_R       = 2          # ячейки мягкой зоны от жёсткой границы
 SOFT_K       = 6.0        # штраф в стоимости движения через мягкую зону
 
@@ -196,7 +215,9 @@ class CoverageNavigator(Node):
         self._spawn_x      = self.get_parameter('spawn_x').value
         self._spawn_y      = self.get_parameter('spawn_y').value
 
-        self._grid = np.zeros((GRID_N, GRID_N), dtype=bool)
+        self._grid      = np.zeros((GRID_N, GRID_N), dtype=bool)
+        self._scan_grid = np.zeros((GRID_N, GRID_N), dtype=bool)
+        self._last_scan_nav: LaserScan | None = None
         self._build_static_map()
 
         self._x = 0.0; self._y = 0.0; self._yaw = 0.0
@@ -230,9 +251,12 @@ class CoverageNavigator(Node):
         self._pub      = self.create_publisher(Twist, '/cmd_vel', 10)
         self._path_pub = self.create_publisher(Path,  '/nav_path', 10)
         self.create_subscription(Odometry,    '/odom',       self._odom_cb,      10)
+        self.create_subscription(LaserScan,   '/scan',       self._scan_cb_nav,  10)
         self.create_subscription(Polygon,     '/scan_area',  self._area_cb,      10)
         self.create_subscription(PoseStamped, '/goal_pose',  self._goal_pose_cb, 10)
         self.create_timer(0.1, self._loop)
+        self.create_timer(3.0, self._log_status)  # периодический дамп состояния
+        _flog.info(f'Navigator started. Log: {_LOG_PATH}')
 
         self.get_logger().info(
             'Coverage Navigator готов. Жду область /scan_area.\n'
@@ -240,12 +264,70 @@ class CoverageNavigator(Node):
             '"{points: [{x: -9.0, y: -9.0, z: 0.0}, {x: 9.0, y: 9.0, z: 0.0}]}" --once'
         )
 
+    # ── Lidar: динамические препятствия ──────────────────────────────────── #
+
+    def _scan_cb_nav(self, msg: LaserScan):
+        """Строит сетку препятствий из текущего скана (обновляется каждые 100мс)."""
+        self._last_scan_nav = msg
+        if not self._odom_ok:
+            return
+        raw = np.zeros((GRID_N, GRID_N), dtype=bool)
+        for i, r in enumerate(msg.ranges):
+            if math.isinf(r) or math.isnan(r) or r < 0.85 or r > 8.0:
+                continue
+            angle = self._yaw + msg.angle_min + i * msg.angle_increment
+            ex = self._x + r * math.cos(angle)
+            ey = self._y + r * math.sin(angle)
+            gx, gy = w2g(ex, ey)
+            raw[gy, gx] = True
+        self._scan_grid = inflate(raw, SCAN_INFLATE)
+
+    def _next_wp_blocked(self) -> bool:
+        """True если следующий waypoint в пути попал в зону инфлированных лидарных препятствий.
+        Это значит путь физически заблокирован — надо перепланировать.
+        В отличие от _obstacle_ahead, не срабатывает просто на близкие стены/барьеры,
+        которые A* уже учёл при построении маршрута."""
+        if self._wp_idx >= len(self._path):
+            return False
+        wx, wy = self._path[self._wp_idx]
+        gx, gy = w2g(wx, wy)
+        blocked = bool(self._scan_grid[gy, gx])
+        if blocked:
+            _flog.warning(
+                f'WAYPOINT BLOCKED: wp#{self._wp_idx} '
+                f'world=({wx:.2f},{wy:.2f}) grid=({gx},{gy}) → replan'
+            )
+        return blocked
+
+    def _log_status(self):
+        """Периодический дамп состояния робота в файл (каждые 3с)."""
+        goal_str = 'none'
+        if self._coverage_goals and self._goal_idx < len(self._coverage_goals):
+            gx, gy = self._coverage_goals[self._goal_idx]
+            goal_str = f'({gx:.1f},{gy:.1f})'
+        dist_to_goal = 0.0
+        if self._coverage_goals and self._goal_idx < len(self._coverage_goals):
+            gx, gy = self._coverage_goals[self._goal_idx]
+            dist_to_goal = math.hypot(gx - self._x, gy - self._y)
+        path_wp = f'{self._wp_idx}/{len(self._path)}' if self._path else '—'
+        scan_blocked = int(self._scan_grid.sum())
+        _flog.info(
+            f'STATUS | state={self._state} '
+            f'pos=({self._x:.2f},{self._y:.2f}) yaw={math.degrees(self._yaw):.1f}° '
+            f'goal={goal_str}[{self._goal_idx}/{len(self._coverage_goals)}] '
+            f'dist={dist_to_goal:.2f}m '
+            f'wp={path_wp} '
+            f'scan_blocked={scan_blocked} '
+            f'odom_ok={self._odom_ok} backing={self._backing}'
+        )
+
     # ── Статическая карта ─────────────────────────────────────────────────── #
 
     def _build_static_map(self):
         raw = np.zeros((GRID_N, GRID_N), dtype=bool)
         walls = [
-            # Внешние стены (±13м)
+            # Внешние стены (±13м) — ровно на границе сетки MAP_HALF=13.0.
+            # Инфляция 6 ячеек (1.5м) блокирует путь к ним изнутри.
             ( 0.0,  13.0,  13.0,  0.15),
             ( 0.0, -13.0,  13.0,  0.15),
             ( 13.0,  0.0,  0.15, 13.0),
@@ -341,11 +423,13 @@ class CoverageNavigator(Node):
         if self._odom_x0 is None:
             self._odom_x0 = ox - self._spawn_x
             self._odom_y0 = oy - self._spawn_y
-            self.get_logger().info(
-                f'Odom offset: ({self._odom_x0:.3f}, {self._odom_y0:.3f}), '
-                f'spawn=({self._spawn_x}, {self._spawn_y}), '
-                f'first_odom=({ox:.3f}, {oy:.3f})'
+            info = (
+                f'ODOM INIT: offset=({self._odom_x0:.3f},{self._odom_y0:.3f}) '
+                f'spawn=({self._spawn_x},{self._spawn_y}) '
+                f'first_odom=({ox:.3f},{oy:.3f})'
             )
+            self.get_logger().info(info)
+            _flog.info(info)
 
         self._x   = ox - self._odom_x0
         self._y   = oy - self._odom_y0
@@ -382,7 +466,14 @@ class CoverageNavigator(Node):
             self._t_stuck = now
 
         if now - self._t_stuck > self._STUCK_TIMEOUT and self._state == 'FOLLOWING':
-            self.get_logger().warn('Застрял! Сдаю назад...')
+            msg = (
+                f'STUCK at world=({self._x:.2f},{self._y:.2f}) '
+                f'yaw={math.degrees(self._yaw):.1f}° '
+                f'goal_idx={self._goal_idx}/{len(self._coverage_goals)} '
+                f'→ reversing'
+            )
+            self.get_logger().warn(msg)
+            _flog.warning(msg)
             self._backing = True
             self._t_back  = now
             return True
@@ -402,24 +493,39 @@ class CoverageNavigator(Node):
         elif self._state == 'PLANNING':
             self._stop()
             if self._goal_idx >= len(self._coverage_goals):
+                _flog.info(f'DONE: all {len(self._coverage_goals)} goals visited')
                 self._state = 'DONE'
                 return
             ok = self._plan()
             if ok:
                 self._t_start = time.time()
                 self._state = 'FOLLOWING'
+                _flog.info(f'→ FOLLOWING goal #{self._goal_idx}')
             else:
-                self.get_logger().warn(
-                    f'Точка {self._coverage_goals[self._goal_idx]} недостижима, пропускаю.'
-                )
+                msg = f'SKIP goal #{self._goal_idx} {self._coverage_goals[self._goal_idx]}: no path'
+                self.get_logger().warn(msg)
+                _flog.warning(msg)
                 self._goal_idx += 1
 
         elif self._state == 'FOLLOWING':
+            # Перепланировать если следующий waypoint оказался заблокирован
+            if self._next_wp_blocked():
+                self._stop()
+                self._state = 'PLANNING'
+                return
+
             if self._check_stuck():
                 return
 
-            if time.time() - self._t_start > self.goal_timeout:
-                self.get_logger().warn(f'Таймаут точки {self._goal_idx}, пропускаю.')
+            elapsed = time.time() - self._t_start
+            if elapsed > self.goal_timeout:
+                msg = (
+                    f'TIMEOUT goal #{self._goal_idx} '
+                    f'pos=({self._x:.2f},{self._y:.2f}) '
+                    f'elapsed={elapsed:.1f}s'
+                )
+                self.get_logger().warn(msg)
+                _flog.warning(msg)
                 self._goal_idx += 1
                 self._state = 'PLANNING'
                 self._stop()
@@ -429,6 +535,11 @@ class CoverageNavigator(Node):
             dist = math.hypot(gx_w - self._x, gy_w - self._y)
 
             if dist < self.goal_r:
+                _flog.info(
+                    f'REACHED goal #{self._goal_idx} '
+                    f'({gx_w:.1f},{gy_w:.1f}) '
+                    f'dist={dist:.2f}m elapsed={elapsed:.1f}s'
+                )
                 self._goal_idx += 1
                 self._state = 'PLANNING'
                 self._stop()
@@ -457,14 +568,35 @@ class CoverageNavigator(Node):
         start = w2g(self._x, self._y)
         goal  = w2g(gx_w, gy_w)
 
-        path_grid = astar(self._grid, start, goal, self._cost_grid)
+        # Объединяем статическую карту со свежими лидарными препятствиями
+        combined = self._grid | self._scan_grid
+        cost     = make_cost_grid(combined)
+
+        scan_blocked = int(self._scan_grid.sum())
+        _flog.info(
+            f'PLAN #{self._goal_idx}: '
+            f'from world=({self._x:.2f},{self._y:.2f}) grid={start} '
+            f'→ world=({gx_w:.2f},{gy_w:.2f}) grid={goal} '
+            f'scan_blocked_cells={scan_blocked} '
+            f'start_in_combined={bool(combined[start[1], start[0]])} '
+            f'goal_in_combined={bool(combined[goal[1], goal[0]])}'
+        )
+
+        path_grid = astar(combined, start, goal, cost)
         if path_grid is None:
+            _flog.error(
+                f'PLAN FAILED: no path '
+                f'from {start} to {goal} '
+                f'(start_blocked={bool(combined[start[1],start[0]])}, '
+                f'goal_blocked={bool(combined[goal[1],goal[0]])})'
+            )
             return False
 
         wpts = [g2w(gx, gy) for gx, gy in path_grid[::2]]
         wpts.append((gx_w, gy_w))
         self._path   = wpts
         self._wp_idx = 0
+        _flog.info(f'PLAN OK: {len(path_grid)} grid cells → {len(wpts)} waypoints')
         self._publish_path(wpts)
         return True
 

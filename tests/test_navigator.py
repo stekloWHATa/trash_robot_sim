@@ -30,18 +30,19 @@ from navigator import (
 # ─── Helpers ─────────────────────────────────────────────────────────────── #
 
 def build_raw_map():
-    """Воспроизводит _build_static_map без ROS."""
+    """Воспроизводит _build_static_map без ROS.
+    Стены точно совпадают с navigator.py _build_static_map."""
     raw = np.zeros((GRID_N, GRID_N), dtype=bool)
     walls = [
-        ( 0.0,  10.0,  10.0,  0.15),
-        ( 0.0, -10.0,  10.0,  0.15),
-        ( 10.0,  0.0,  0.15, 10.0),
-        (-10.0,  0.0,  0.15, 10.0),
-        ( 1.0,  5.0,   4.0,  0.15),   # barrier_A
-        (-6.0,  1.0,   0.15,  4.0),   # barrier_B
-        ( 3.0,  0.0,   3.0,  0.15),   # barrier_C
-        ( 5.0, -4.0,   0.15,  3.0),   # barrier_D
-        (-1.5, -5.0,   3.5,  0.15),   # barrier_E
+        ( 0.0,  13.0,  13.0,  0.15),   # outer north  (±13м, как в navigator.py)
+        ( 0.0, -13.0,  13.0,  0.15),   # outer south
+        ( 13.0,  0.0,  0.15, 13.0),    # outer east
+        (-13.0,  0.0,  0.15, 13.0),    # outer west
+        ( 1.0,  5.0,   4.0,  0.15),    # barrier_A
+        (-6.0,  1.0,   0.15,  4.0),    # barrier_B
+        ( 3.0,  0.0,   3.0,  0.15),    # barrier_C
+        ( 5.0, -4.0,   0.15,  3.0),    # barrier_D
+        (-1.5, -5.0,   3.5,  0.15),    # barrier_E
     ]
     for cx, cy, hx, hy in walls:
         gx0, gy0 = w2g(cx - hx, cy - hy)
@@ -153,13 +154,14 @@ class TestStaticMap:
         )
 
     def test_outer_walls_blocked(self):
-        """Внешние стены должны быть заблокированы с инфляцией."""
-        # Точки внутри инфляции внешних стен
+        """Внешние стены (±13м) должны быть заблокированы с инфляцией.
+        Внутренняя граница инфляции: 13.0 - 0.15 - INFLATE_M ≈ 11.35м.
+        Проверяем точки на 12м — гарантированно внутри зоны инфляции."""
         for wx, wy, label in [
-            ( 0.0,  9.5, 'north inner'),
-            ( 0.0, -9.5, 'south inner'),
-            ( 9.5,  0.0, 'east inner'),
-            (-9.5,  0.0, 'west inner'),
+            ( 0.0,  12.0, 'north inner'),
+            ( 0.0, -12.0, 'south inner'),
+            ( 12.0,  0.0, 'east inner'),
+            (-12.0,  0.0, 'west inner'),
         ]:
             gx, gy = w2g(wx, wy)
             assert self.grid[gy, gx], f"{label} wall not blocked at ({wx},{wy})"

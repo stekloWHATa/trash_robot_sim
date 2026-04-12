@@ -106,7 +106,7 @@
     <parent link="desk_for_depth"/>
     <child  link="RGBD_camera"/>
     <!-- SDF pitch=0.872665 (наклон носом вниз) → в URDF rpy=(0, 0.872665, 0) -->
-    <origin xyz="0.05 0 0.33" rpy="0 0.872665 0"/>
+    <origin xyz="0.05 0 0.33" rpy="0 1.1 0"/>
   </joint>
 
   <!-- ===== НАВИГАЦИОННАЯ КАМЕРА (SDF: pose relative_to body) ===== -->
@@ -126,7 +126,7 @@
   <joint name="nav_camera_joint" type="fixed">
     <parent link="base_link"/>
     <child  link="nav_camera"/>
-    <origin xyz="0.6 0 0" rpy="0 0.0872665 0"/>
+    <origin xyz="0.6 0 0" rpy="0 0.45 0"/>
   </joint>
 
   <!-- ===== ЛИДАР (SDF: pose relative_to body: 0 0 0.32) ===== -->

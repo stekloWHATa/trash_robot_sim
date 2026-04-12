@@ -183,7 +183,10 @@ class MapBuilder(Node):
             ex_g, ey_g = self._w2g(ex, ey)
 
             for bx, by in self._bresenham(ox, oy, ex_g, ey_g):
-                self._log_odds[by, bx] = max(L_MIN, self._log_odds[by, bx] + L_FREE)
+                # Не стираем уже подтверждённые стены: ячейка выше порога отображения
+                # (log_odds > 1.5) считается постоянной — стены статичны, никто их не двигает.
+                if self._log_odds[by, bx] <= 1.5:
+                    self._log_odds[by, bx] = max(L_MIN, self._log_odds[by, bx] + L_FREE)
 
             if hit:
                 self._log_odds[ey_g, ex_g] = min(L_MAX, self._log_odds[ey_g, ex_g] + L_OCC)

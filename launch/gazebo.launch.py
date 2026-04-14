@@ -98,11 +98,20 @@ def generate_launch_description():
         output='screen',
     )
 
-    # Построитель карты + детектор мусора
+    # Построитель карты (только лидар)
     map_builder = Node(
         package='trash_robot_sim',
         executable='map_builder.py',
         name='map_builder',
+        parameters=[params_file, {'use_sim_time': False}],
+        output='screen',
+    )
+
+    # YOLOv8 детектор мусора + пространственная локализация
+    detector = Node(
+        package='trash_robot_sim',
+        executable='detector.py',
+        name='trash_detector',
         parameters=[params_file, {'use_sim_time': False}],
         output='screen',
     )
@@ -119,4 +128,5 @@ def generate_launch_description():
         robot_state_pub,
         navigator,
         map_builder,
+        detector,
     ])

@@ -14,11 +14,12 @@ install(DIRECTORY
   DESTINATION share/${PROJECT_NAME}
 )
 
-# Python-скрипты (навигатор, построитель карты)
+# Python-скрипты
 install(PROGRAMS
   scripts/navigator.py
   scripts/map_builder.py
   scripts/map_check.py
+  scripts/detector.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

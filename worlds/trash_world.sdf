@@ -95,204 +95,302 @@
       </link>
     </model>
 
-    <!-- ===== ВНУТРЕННИЕ БАРЬЕРЫ (совпадают с navigator.py _build_static_map) ===== -->
-
-    <!-- barrier_A: горизонт., y=5, x от -3 до 5  (center=1.0,5.0  half_x=4.0) -->
-    <model name="barrier_A">
-      <static>true</static>
-      <pose>1.0 5.0 0.75 0 0 0</pose>
-      <link name="link">
-        <collision name="col"><geometry><box><size>8.0 0.3 1.5</size></box></geometry></collision>
-        <visual name="vis">
-          <geometry><box><size>8.0 0.3 1.5</size></box></geometry>
-          <material><ambient>0.5 0.4 0.35 1</ambient><diffuse>0.6 0.5 0.42 1</diffuse></material>
-        </visual>
-      </link>
-    </model>
-
-    <!-- barrier_B: верт., x=-6, y от -3 до 5  (center=-6.0,1.0  half_y=4.0) -->
-    <model name="barrier_B">
-      <static>true</static>
-      <pose>-6.0 1.0 0.75 0 0 0</pose>
-      <link name="link">
-        <collision name="col"><geometry><box><size>0.3 8.0 1.5</size></box></geometry></collision>
-        <visual name="vis">
-          <geometry><box><size>0.3 8.0 1.5</size></box></geometry>
-          <material><ambient>0.5 0.4 0.35 1</ambient><diffuse>0.6 0.5 0.42 1</diffuse></material>
-        </visual>
-      </link>
-    </model>
-
-    <!-- barrier_C: горизонт., y=0, x от 0 до 6  (center=3.0,0.0  half_x=3.0) -->
-    <model name="barrier_C">
-      <static>true</static>
-      <pose>3.0 0.0 0.75 0 0 0</pose>
-      <link name="link">
-        <collision name="col"><geometry><box><size>6.0 0.3 1.5</size></box></geometry></collision>
-        <visual name="vis">
-          <geometry><box><size>6.0 0.3 1.5</size></box></geometry>
-          <material><ambient>0.5 0.4 0.35 1</ambient><diffuse>0.6 0.5 0.42 1</diffuse></material>
-        </visual>
-      </link>
-    </model>
-
-    <!-- barrier_D: верт., x=5, y от -7 до -1  (center=5.0,-4.0  half_y=3.0) -->
-    <model name="barrier_D">
-      <static>true</static>
-      <pose>5.0 -4.0 0.75 0 0 0</pose>
-      <link name="link">
-        <collision name="col"><geometry><box><size>0.3 6.0 1.5</size></box></geometry></collision>
-        <visual name="vis">
-          <geometry><box><size>0.3 6.0 1.5</size></box></geometry>
-          <material><ambient>0.5 0.4 0.35 1</ambient><diffuse>0.6 0.5 0.42 1</diffuse></material>
-        </visual>
-      </link>
-    </model>
-
-    <!-- barrier_E: горизонт., y=-5, x от -5 до 2  (center=-1.5,-5.0  half_x=3.5) -->
-    <model name="barrier_E">
-      <static>true</static>
-      <pose>-1.5 -5.0 0.75 0 0 0</pose>
-      <link name="link">
-        <collision name="col"><geometry><box><size>7.0 0.3 1.5</size></box></geometry></collision>
-        <visual name="vis">
-          <geometry><box><size>7.0 0.3 1.5</size></box></geometry>
-          <material><ambient>0.5 0.4 0.35 1</ambient><diffuse>0.6 0.5 0.42 1</diffuse></material>
-        </visual>
-      </link>
-    </model>
-
     <!--
     ================================================================
-      МУСОР — 20 объектов
-      Mesh-модели из Gazebo Fuel (авто-скачиваются при первом запуске).
-      YOLO классы: bottle(39), wine glass(40), cup(41), book(72)
-      Позиции разбросаны по всей арене вдали от барьеров.
+      МУСОР — 30 объектов, 5 типов
+      Барьеры убраны — вся арена открыта для движения.
+      YOLO (COCO): bottle(39), wine glass(40), cup(41), book(72)
+      Сигареты: нет в COCO → нужна дообученная модель (TACO dataset)
     ================================================================
     -->
 
-    <!-- ── ЖЕСТЯНЫЕ БАНКИ (Coke Can) — YOLO: cup / bottle ──────────── -->
+    <!-- ── ЖЕСТЯНЫЕ БАНКИ (Coke Can, Fuel mesh) — YOLO: cup/bottle ─── -->
     <include>
       <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Coke Can</uri>
-      <name>coke_1</name>
-      <pose>-9.0  8.0 0 0 0 0.4</pose>
+      <name>coke_1</name><pose>-8.0  9.0 0 0 0 0.4</pose>
     </include>
-
     <include>
       <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Coke Can</uri>
-      <name>coke_2</name>
-      <pose> 2.0  10.5 0 0 0 1.1</pose>
+      <name>coke_2</name><pose> 2.0  10.0 0 0 0 1.1</pose>
     </include>
-
     <include>
       <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Coke Can</uri>
-      <name>coke_3</name>
-      <pose> 10.0  4.5 0 0 0 0.7</pose>
+      <name>coke_3</name><pose> 10.0  5.0 0 0 0 0.7</pose>
     </include>
-
     <include>
       <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Coke Can</uri>
-      <name>coke_4</name>
-      <pose> 9.0 -8.5 0 0 0 2.1</pose>
+      <name>coke_4</name><pose> 9.0 -8.0 0 0 0 2.1</pose>
     </include>
-
     <include>
       <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Coke Can</uri>
-      <name>coke_5</name>
-      <pose>-3.0 -9.5 0 0 0 0.3</pose>
+      <name>coke_5</name><pose>-3.0 -9.0 0 0 0 0.3</pose>
     </include>
-
     <include>
       <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Coke Can</uri>
-      <name>coke_6</name>
-      <pose>-11.0  4.0 0 0 0 1.8</pose>
+      <name>coke_6</name><pose>-10.5  3.0 0 0 0 1.8</pose>
     </include>
-
     <include>
       <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Coke Can</uri>
-      <name>coke_7</name>
-      <pose> 6.0 -9.5 0 0 0 0.9</pose>
+      <name>coke_7</name><pose> 6.0 -9.0 0 0 0 0.9</pose>
     </include>
 
-    <!-- ── ПИВНЫЕ БУТЫЛКИ (Beer) — YOLO: bottle ────────────────────── -->
-    <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Beer</uri>
-      <name>beer_1</name>
-      <pose>-5.5  11.0 0 0 0 0.6</pose>
-    </include>
+    <!-- ── СТЕКЛЯННЫЕ БУТЫЛКИ (прозрачные, зелёное стекло) ──────────
+         Заменяют Fuel-модель Beer (которая рендерится чёрной в Ogre2).
+         YOLO: bottle(39) / wine glass(40)                           -->
+    <model name="glass_bottle_1"><static>true</static><pose>-5.0 10.5 0 0 0 0.6</pose>
+      <link name="link">
+        <visual name="body"><pose>0 0 0.13 0 0 0</pose>
+          <geometry><cylinder><radius>0.038</radius><length>0.26</length></cylinder></geometry>
+          <material><ambient>0.15 0.55 0.15 0.28</ambient><diffuse>0.20 0.70 0.20 0.28</diffuse>
+            <specular>0.9 0.9 0.9 1.0</specular></material></visual>
+        <visual name="neck"><pose>0 0 0.278 0 0 0</pose>
+          <geometry><cylinder><radius>0.018</radius><length>0.06</length></cylinder></geometry>
+          <material><ambient>0.15 0.55 0.15 0.28</ambient><diffuse>0.20 0.70 0.20 0.28</diffuse>
+            <specular>0.9 0.9 0.9 1.0</specular></material></visual>
+        <collision name="c"><pose>0 0 0.15 0 0 0</pose>
+          <geometry><cylinder><radius>0.038</radius><length>0.31</length></cylinder></geometry></collision>
+      </link></model>
 
-    <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Beer</uri>
-      <name>beer_2</name>
-      <pose> 7.5   9.0 0 0 0 1.3</pose>
-    </include>
+    <model name="glass_bottle_2"><static>true</static><pose> 7.5  9.0 0 0 0 1.3</pose>
+      <link name="link">
+        <visual name="body"><pose>0 0 0.13 0 0 0</pose>
+          <geometry><cylinder><radius>0.038</radius><length>0.26</length></cylinder></geometry>
+          <material><ambient>0.15 0.55 0.15 0.28</ambient><diffuse>0.20 0.70 0.20 0.28</diffuse>
+            <specular>0.9 0.9 0.9 1.0</specular></material></visual>
+        <visual name="neck"><pose>0 0 0.278 0 0 0</pose>
+          <geometry><cylinder><radius>0.018</radius><length>0.06</length></cylinder></geometry>
+          <material><ambient>0.15 0.55 0.15 0.28</ambient><diffuse>0.20 0.70 0.20 0.28</diffuse>
+            <specular>0.9 0.9 0.9 1.0</specular></material></visual>
+        <collision name="c"><pose>0 0 0.15 0 0 0</pose>
+          <geometry><cylinder><radius>0.038</radius><length>0.31</length></cylinder></geometry></collision>
+      </link></model>
 
-    <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Beer</uri>
-      <name>beer_3</name>
-      <pose> 11.0  -1.0 0 0 0 0.2</pose>
-    </include>
+    <model name="glass_bottle_3"><static>true</static><pose> 11.0  0.0 0 0 0 0.2</pose>
+      <link name="link">
+        <visual name="body"><pose>0 0 0.13 0 0 0</pose>
+          <geometry><cylinder><radius>0.038</radius><length>0.26</length></cylinder></geometry>
+          <material><ambient>0.15 0.55 0.15 0.28</ambient><diffuse>0.20 0.70 0.20 0.28</diffuse>
+            <specular>0.9 0.9 0.9 1.0</specular></material></visual>
+        <visual name="neck"><pose>0 0 0.278 0 0 0</pose>
+          <geometry><cylinder><radius>0.018</radius><length>0.06</length></cylinder></geometry>
+          <material><ambient>0.15 0.55 0.15 0.28</ambient><diffuse>0.20 0.70 0.20 0.28</diffuse>
+            <specular>0.9 0.9 0.9 1.0</specular></material></visual>
+        <collision name="c"><pose>0 0 0.15 0 0 0</pose>
+          <geometry><cylinder><radius>0.038</radius><length>0.31</length></cylinder></geometry></collision>
+      </link></model>
 
-    <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Beer</uri>
-      <name>beer_4</name>
-      <pose> 3.0 -11.0 0 0 0 2.5</pose>
-    </include>
+    <model name="glass_bottle_4"><static>true</static><pose> 3.0 -10.5 0 0 0 2.5</pose>
+      <link name="link">
+        <visual name="body"><pose>0 0 0.13 0 0 0</pose>
+          <geometry><cylinder><radius>0.038</radius><length>0.26</length></cylinder></geometry>
+          <material><ambient>0.15 0.55 0.15 0.28</ambient><diffuse>0.20 0.70 0.20 0.28</diffuse>
+            <specular>0.9 0.9 0.9 1.0</specular></material></visual>
+        <visual name="neck"><pose>0 0 0.278 0 0 0</pose>
+          <geometry><cylinder><radius>0.018</radius><length>0.06</length></cylinder></geometry>
+          <material><ambient>0.15 0.55 0.15 0.28</ambient><diffuse>0.20 0.70 0.20 0.28</diffuse>
+            <specular>0.9 0.9 0.9 1.0</specular></material></visual>
+        <collision name="c"><pose>0 0 0.15 0 0 0</pose>
+          <geometry><cylinder><radius>0.038</radius><length>0.31</length></cylinder></geometry></collision>
+      </link></model>
 
-    <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Beer</uri>
-      <name>beer_5</name>
-      <pose>-8.0  -9.0 0 0 0 0.8</pose>
-    </include>
+    <model name="glass_bottle_5"><static>true</static><pose>-8.0 -9.0 0 0 0 0.8</pose>
+      <link name="link">
+        <visual name="body"><pose>0 0 0.13 0 0 0</pose>
+          <geometry><cylinder><radius>0.038</radius><length>0.26</length></cylinder></geometry>
+          <material><ambient>0.15 0.55 0.15 0.28</ambient><diffuse>0.20 0.70 0.20 0.28</diffuse>
+            <specular>0.9 0.9 0.9 1.0</specular></material></visual>
+        <visual name="neck"><pose>0 0 0.278 0 0 0</pose>
+          <geometry><cylinder><radius>0.018</radius><length>0.06</length></cylinder></geometry>
+          <material><ambient>0.15 0.55 0.15 0.28</ambient><diffuse>0.20 0.70 0.20 0.28</diffuse>
+            <specular>0.9 0.9 0.9 1.0</specular></material></visual>
+        <collision name="c"><pose>0 0 0.15 0 0 0</pose>
+          <geometry><cylinder><radius>0.038</radius><length>0.31</length></cylinder></geometry></collision>
+      </link></model>
 
-    <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Beer</uri>
-      <name>beer_6</name>
-      <pose>-11.5  -5.0 0 0 0 1.5</pose>
-    </include>
+    <model name="glass_bottle_6"><static>true</static><pose>-11.0 -4.0 0 0 0 1.5</pose>
+      <link name="link">
+        <visual name="body"><pose>0 0 0.13 0 0 0</pose>
+          <geometry><cylinder><radius>0.038</radius><length>0.26</length></cylinder></geometry>
+          <material><ambient>0.15 0.55 0.15 0.28</ambient><diffuse>0.20 0.70 0.20 0.28</diffuse>
+            <specular>0.9 0.9 0.9 1.0</specular></material></visual>
+        <visual name="neck"><pose>0 0 0.278 0 0 0</pose>
+          <geometry><cylinder><radius>0.018</radius><length>0.06</length></cylinder></geometry>
+          <material><ambient>0.15 0.55 0.15 0.28</ambient><diffuse>0.20 0.70 0.20 0.28</diffuse>
+            <specular>0.9 0.9 0.9 1.0</specular></material></visual>
+        <collision name="c"><pose>0 0 0.15 0 0 0</pose>
+          <geometry><cylinder><radius>0.038</radius><length>0.31</length></cylinder></geometry></collision>
+      </link></model>
 
-    <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Beer</uri>
-      <name>beer_7</name>
-      <pose> 8.5   3.0 0 0 0 0.1</pose>
-    </include>
+    <model name="glass_bottle_7"><static>true</static><pose> 8.5  3.0 0 0 0 0.1</pose>
+      <link name="link">
+        <visual name="body"><pose>0 0 0.13 0 0 0</pose>
+          <geometry><cylinder><radius>0.038</radius><length>0.26</length></cylinder></geometry>
+          <material><ambient>0.15 0.55 0.15 0.28</ambient><diffuse>0.20 0.70 0.20 0.28</diffuse>
+            <specular>0.9 0.9 0.9 1.0</specular></material></visual>
+        <visual name="neck"><pose>0 0 0.278 0 0 0</pose>
+          <geometry><cylinder><radius>0.018</radius><length>0.06</length></cylinder></geometry>
+          <material><ambient>0.15 0.55 0.15 0.28</ambient><diffuse>0.20 0.70 0.20 0.28</diffuse>
+            <specular>0.9 0.9 0.9 1.0</specular></material></visual>
+        <collision name="c"><pose>0 0 0.15 0 0 0</pose>
+          <geometry><cylinder><radius>0.038</radius><length>0.31</length></cylinder></geometry></collision>
+      </link></model>
 
-    <!-- ── КАРТОННЫЕ КОРОБКИ (Cardboard Box) — YOLO: suitcase/book ─── -->
+    <!-- ── КАРТОННЫЕ КОРОБКИ (Fuel mesh) — YOLO: suitcase ───────────── -->
     <include>
       <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Cardboard Box</uri>
-      <name>box_1</name>
-      <pose>-2.5   8.5 0 0 0 0.5</pose>
+      <name>box_1</name><pose>-2.5  8.5 0 0 0 0.5</pose>
     </include>
-
     <include>
       <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Cardboard Box</uri>
-      <name>box_2</name>
-      <pose> 10.5  -6.0 0 0 0 1.0</pose>
+      <name>box_2</name><pose> 10.5 -5.0 0 0 0 1.0</pose>
     </include>
-
     <include>
       <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Cardboard Box</uri>
-      <name>box_3</name>
-      <pose>-7.5   6.5 0 0 0 0.7</pose>
+      <name>box_3</name><pose>-7.5  7.0 0 0 0 0.7</pose>
     </include>
-
     <include>
       <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Cardboard Box</uri>
-      <name>box_4</name>
-      <pose>-9.5  -7.5 0 0 0 1.2</pose>
+      <name>box_4</name><pose>-9.5 -7.0 0 0 0 1.2</pose>
     </include>
-
     <include>
       <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Cardboard Box</uri>
-      <name>box_5</name>
-      <pose>-4.5  -8.0 0 0 0 0.3</pose>
+      <name>box_5</name><pose>-4.5 -8.0 0 0 0 0.3</pose>
     </include>
-
     <include>
       <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Cardboard Box</uri>
-      <name>box_6</name>
-      <pose> 7.0  11.0 0 0 0 0.9</pose>
+      <name>box_6</name><pose> 7.0  11.0 0 0 0 0.9</pose>
     </include>
+
+    <!-- ── БЫЧКИ СИГАРЕТНЫЕ — лежат на полу ─────────────────────────
+         Тело: жёлто-коричневый цилиндр (табак)
+         Фильтр: оранжевый торец
+         Размер: r=0.005м, L=0.065м                                  -->
+    <model name="cig_butt_1"><static>true</static><pose> 3.5  7.5 0.005 1.5707963 0 0.8</pose>
+      <link name="link">
+        <visual name="body">
+          <geometry><cylinder><radius>0.005</radius><length>0.055</length></cylinder></geometry>
+          <material><ambient>0.72 0.64 0.38 1</ambient><diffuse>0.80 0.72 0.42 1</diffuse></material></visual>
+        <visual name="filter"><pose>0.030 0 0 0 0 0</pose>
+          <geometry><cylinder><radius>0.005</radius><length>0.012</length></cylinder></geometry>
+          <material><ambient>0.90 0.45 0.10 1</ambient><diffuse>1.00 0.55 0.15 1</diffuse></material></visual>
+        <collision name="c">
+          <geometry><cylinder><radius>0.005</radius><length>0.065</length></cylinder></geometry></collision>
+      </link></model>
+
+    <model name="cig_butt_2"><static>true</static><pose>-4.0  3.5 0.005 1.5707963 0 2.1</pose>
+      <link name="link">
+        <visual name="body">
+          <geometry><cylinder><radius>0.005</radius><length>0.055</length></cylinder></geometry>
+          <material><ambient>0.72 0.64 0.38 1</ambient><diffuse>0.80 0.72 0.42 1</diffuse></material></visual>
+        <visual name="filter"><pose>0.030 0 0 0 0 0</pose>
+          <geometry><cylinder><radius>0.005</radius><length>0.012</length></cylinder></geometry>
+          <material><ambient>0.90 0.45 0.10 1</ambient><diffuse>1.00 0.55 0.15 1</diffuse></material></visual>
+        <collision name="c">
+          <geometry><cylinder><radius>0.005</radius><length>0.065</length></cylinder></geometry></collision>
+      </link></model>
+
+    <model name="cig_butt_3"><static>true</static><pose> 7.0 -2.5 0.005 1.5707963 0 0.3</pose>
+      <link name="link">
+        <visual name="body">
+          <geometry><cylinder><radius>0.005</radius><length>0.055</length></cylinder></geometry>
+          <material><ambient>0.72 0.64 0.38 1</ambient><diffuse>0.80 0.72 0.42 1</diffuse></material></visual>
+        <visual name="filter"><pose>0.030 0 0 0 0 0</pose>
+          <geometry><cylinder><radius>0.005</radius><length>0.012</length></cylinder></geometry>
+          <material><ambient>0.90 0.45 0.10 1</ambient><diffuse>1.00 0.55 0.15 1</diffuse></material></visual>
+        <collision name="c">
+          <geometry><cylinder><radius>0.005</radius><length>0.065</length></cylinder></geometry></collision>
+      </link></model>
+
+    <model name="cig_butt_4"><static>true</static><pose>-2.5 -7.5 0.005 1.5707963 0 1.7</pose>
+      <link name="link">
+        <visual name="body">
+          <geometry><cylinder><radius>0.005</radius><length>0.055</length></cylinder></geometry>
+          <material><ambient>0.72 0.64 0.38 1</ambient><diffuse>0.80 0.72 0.42 1</diffuse></material></visual>
+        <visual name="filter"><pose>0.030 0 0 0 0 0</pose>
+          <geometry><cylinder><radius>0.005</radius><length>0.012</length></cylinder></geometry>
+          <material><ambient>0.90 0.45 0.10 1</ambient><diffuse>1.00 0.55 0.15 1</diffuse></material></visual>
+        <collision name="c">
+          <geometry><cylinder><radius>0.005</radius><length>0.065</length></cylinder></geometry></collision>
+      </link></model>
+
+    <model name="cig_butt_5"><static>true</static><pose> 5.5  6.0 0.005 1.5707963 0 2.8</pose>
+      <link name="link">
+        <visual name="body">
+          <geometry><cylinder><radius>0.005</radius><length>0.055</length></cylinder></geometry>
+          <material><ambient>0.72 0.64 0.38 1</ambient><diffuse>0.80 0.72 0.42 1</diffuse></material></visual>
+        <visual name="filter"><pose>0.030 0 0 0 0 0</pose>
+          <geometry><cylinder><radius>0.005</radius><length>0.012</length></cylinder></geometry>
+          <material><ambient>0.90 0.45 0.10 1</ambient><diffuse>1.00 0.55 0.15 1</diffuse></material></visual>
+        <collision name="c">
+          <geometry><cylinder><radius>0.005</radius><length>0.065</length></cylinder></geometry></collision>
+      </link></model>
+
+    <model name="cig_butt_6"><static>true</static><pose>-8.0 -4.5 0.005 1.5707963 0 0.6</pose>
+      <link name="link">
+        <visual name="body">
+          <geometry><cylinder><radius>0.005</radius><length>0.055</length></cylinder></geometry>
+          <material><ambient>0.72 0.64 0.38 1</ambient><diffuse>0.80 0.72 0.42 1</diffuse></material></visual>
+        <visual name="filter"><pose>0.030 0 0 0 0 0</pose>
+          <geometry><cylinder><radius>0.005</radius><length>0.012</length></cylinder></geometry>
+          <material><ambient>0.90 0.45 0.10 1</ambient><diffuse>1.00 0.55 0.15 1</diffuse></material></visual>
+        <collision name="c">
+          <geometry><cylinder><radius>0.005</radius><length>0.065</length></cylinder></geometry></collision>
+      </link></model>
+
+    <!-- ── ПАЧКИ СИГАРЕТ ─────────────────────────────────────────────
+         Размер Marlboro: 85×55×22 мм (L×W×H)
+         Красно-белая расцветка                                       -->
+    <model name="cig_pack_1"><static>true</static><pose> 4.0 -6.5 0.011 0 0 0.4</pose>
+      <link name="link">
+        <visual name="body"><pose>0 0 0 0 0 0</pose>
+          <geometry><box><size>0.055 0.085 0.022</size></box></geometry>
+          <material><ambient>0.80 0.08 0.08 1</ambient><diffuse>0.90 0.10 0.10 1</diffuse>
+            <specular>0.3 0.3 0.3 1</specular></material></visual>
+        <visual name="top_stripe"><pose>0 0 0.008 0 0 0</pose>
+          <geometry><box><size>0.055 0.085 0.006</size></box></geometry>
+          <material><ambient>0.95 0.95 0.95 1</ambient><diffuse>1.0 1.0 1.0 1</diffuse></material></visual>
+        <collision name="c">
+          <geometry><box><size>0.055 0.085 0.022</size></box></geometry></collision>
+      </link></model>
+
+    <model name="cig_pack_2"><static>true</static><pose>-5.0  6.5 0.011 0 0 1.2</pose>
+      <link name="link">
+        <visual name="body"><pose>0 0 0 0 0 0</pose>
+          <geometry><box><size>0.055 0.085 0.022</size></box></geometry>
+          <material><ambient>0.80 0.08 0.08 1</ambient><diffuse>0.90 0.10 0.10 1</diffuse>
+            <specular>0.3 0.3 0.3 1</specular></material></visual>
+        <visual name="top_stripe"><pose>0 0 0.008 0 0 0</pose>
+          <geometry><box><size>0.055 0.085 0.006</size></box></geometry>
+          <material><ambient>0.95 0.95 0.95 1</ambient><diffuse>1.0 1.0 1.0 1</diffuse></material></visual>
+        <collision name="c">
+          <geometry><box><size>0.055 0.085 0.022</size></box></geometry></collision>
+      </link></model>
+
+    <model name="cig_pack_3"><static>true</static><pose>-1.0  8.0 0.011 0 0 2.5</pose>
+      <link name="link">
+        <visual name="body"><pose>0 0 0 0 0 0</pose>
+          <geometry><box><size>0.055 0.085 0.022</size></box></geometry>
+          <material><ambient>0.80 0.08 0.08 1</ambient><diffuse>0.90 0.10 0.10 1</diffuse>
+            <specular>0.3 0.3 0.3 1</specular></material></visual>
+        <visual name="top_stripe"><pose>0 0 0.008 0 0 0</pose>
+          <geometry><box><size>0.055 0.085 0.006</size></box></geometry>
+          <material><ambient>0.95 0.95 0.95 1</ambient><diffuse>1.0 1.0 1.0 1</diffuse></material></visual>
+        <collision name="c">
+          <geometry><box><size>0.055 0.085 0.022</size></box></geometry></collision>
+      </link></model>
+
+    <model name="cig_pack_4"><static>true</static><pose> 8.5 -5.5 0.011 0 0 0.8</pose>
+      <link name="link">
+        <visual name="body"><pose>0 0 0 0 0 0</pose>
+          <geometry><box><size>0.055 0.085 0.022</size></box></geometry>
+          <material><ambient>0.80 0.08 0.08 1</ambient><diffuse>0.90 0.10 0.10 1</diffuse>
+            <specular>0.3 0.3 0.3 1</specular></material></visual>
+        <visual name="top_stripe"><pose>0 0 0.008 0 0 0</pose>
+          <geometry><box><size>0.055 0.085 0.006</size></box></geometry>
+          <material><ambient>0.95 0.95 0.95 1</ambient><diffuse>1.0 1.0 1.0 1</diffuse></material></visual>
+        <collision name="c">
+          <geometry><box><size>0.055 0.085 0.022</size></box></geometry></collision>
+      </link></model>
 
   </world>
 </sdf>

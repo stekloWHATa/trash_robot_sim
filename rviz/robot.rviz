@@ -193,13 +193,13 @@ Visualization Manager:
         Value: /camera/image
       Value: true
 
-    # ── RGBD камера — цвет (/rgbd/image) ─────────────────────────────────────
+    # ── YOLOv8 детекции (/detections_img) ───────────────────────────────────
     - Class: rviz_default_plugins/Image
       Enabled: true
       Max Value: 1
       Median window: 5
       Min Value: 0
-      Name: RGBDCamera
+      Name: YOLODetections
       Normalize Range: true
       Topic:
         Depth: 5
@@ -207,7 +207,7 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Best Effort
-        Value: /rgbd/image
+        Value: /detections_img
       Value: true
 
   Enabled: true
@@ -277,7 +277,7 @@ Window Geometry:
   Hide Right Dock: false
   NavCamera:
     collapsed: false
-  RGBDCamera:
+  YOLODetections:
     collapsed: false
   Selection:
     collapsed: false

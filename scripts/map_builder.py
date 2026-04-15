@@ -59,6 +59,7 @@ class MapBuilder(Node):
         self._last_scan: LaserScan | None = None
         self._odom_x0: float | None = None
         self._odom_y0: float | None = None
+        self._map_dirty = False   # публикуем карту только при изменениях
 
         map_qos = QoSProfile(depth=1,
                              reliability=QoSReliabilityPolicy.RELIABLE,
@@ -145,9 +146,11 @@ class MapBuilder(Node):
                 # (log_odds > 1.5) считается постоянной — стены статичны, никто их не двигает.
                 if self._log_odds[by, bx] <= 1.5:
                     self._log_odds[by, bx] = max(L_MIN, self._log_odds[by, bx] + L_FREE)
+                    self._map_dirty = True
 
             if hit:
                 self._log_odds[ey_g, ex_g] = min(L_MAX, self._log_odds[ey_g, ex_g] + L_OCC)
+                self._map_dirty = True
 
     @staticmethod
     def _bresenham(x0, y0, x1, y1):
@@ -173,6 +176,13 @@ class MapBuilder(Node):
     # ── Публикация карты ─────────────────────────────────────────────────── #
 
     def _publish_map(self):
+        # Публикуем карту только когда log_odds массив реально изменился.
+        # Это устраняет мигание: RViz получает новую карту лишь после скана лидара,
+        # а не 10 раз в секунду с одинаковыми данными.
+        if not self._map_dirty:
+            return
+        self._map_dirty = False
+
         # Все ячейки по умолчанию белые (свободно = 0).
         # Только подтверждённые препятствия (2+ попадания) красятся чёрным.
         # Серые "неизведанные" зоны убраны: если лидар туда не дотягивался —

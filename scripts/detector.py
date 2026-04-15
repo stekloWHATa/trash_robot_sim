@@ -276,8 +276,22 @@ class Detector(Node):
 
     def _detect_timer(self):
         """Периодический запуск YOLOv8 инференса."""
-        if self._model is None or not self._odom_ok or self._K is None:
+        if self._model is None or not self._odom_ok:
             return
+
+        # Если camera_info так и не пришёл — считаем интринсики из параметров SDF:
+        # horizontal_fov=1.5 рад, width=640, height=480
+        if self._K is None:
+            fov, w, h = 1.5, 640.0, 480.0
+            fx = (w / 2.0) / math.tan(fov / 2.0)
+            self._K = np.array(
+                [[fx, 0.0, w / 2.0],
+                 [0.0, fx, h / 2.0],
+                 [0.0, 0.0, 1.0]], dtype=np.float64)
+            self.get_logger().warn(
+                f'/rgbd/camera_info не получен — используем расчётные интринсики '
+                f'из SDF: fx=fy={fx:.1f}, cx={w/2:.0f}, cy={h/2:.0f}'
+            )
 
         with self._img_lock:
             if self._latest_rgb is None or self._latest_depth is None:

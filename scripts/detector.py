@@ -206,12 +206,12 @@ class Detector(Node):
             Image, '/detections_img', 10)
 
         # ── Подписки ───────────────────────────────────────────────────── #
-        self.create_subscription(Odometry,   '/odom',                   self._odom_cb,    10)
-        self.create_subscription(CameraInfo, '/rgbd/image/camera_info', self._caminfo_cb,  1)
-        self.create_subscription(Image,      '/rgbd/image',             self._rgb_cb,     10)
-        # В Gazebo Harmonic rgbd_camera с <topic>/rgbd/image</topic>
-        # публикует depth на /rgbd/image_depth (base + "_depth")
-        self.create_subscription(Image,      '/rgbd/image_depth',       self._depth_cb,   10)
+        self.create_subscription(Odometry,   '/odom',                        self._odom_cb,    10)
+        self.create_subscription(CameraInfo, '/rgbd/image/camera_info',     self._caminfo_cb,  1)
+        # Gazebo Harmonic: rgbd_camera с <topic>/rgbd/image</topic>
+        # создаёт namespace /rgbd/image/ и публикует .../image, .../depth_image
+        self.create_subscription(Image,      '/rgbd/image/image',            self._rgb_cb,     10)
+        self.create_subscription(Image,      '/rgbd/image/depth_image',      self._depth_cb,   10)
 
         # ── Таймеры ────────────────────────────────────────────────────── #
         detect_period = 1.0 / max(0.5, self._rate)

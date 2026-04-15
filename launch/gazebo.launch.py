@@ -60,8 +60,10 @@ def generate_launch_description():
             '/odom@nav_msgs/msg/Odometry@gz.msgs.Odometry',
             '/scan@sensor_msgs/msg/LaserScan@gz.msgs.LaserScan',
             '/camera/image@sensor_msgs/msg/Image@gz.msgs.Image',
-            '/rgbd/image@sensor_msgs/msg/Image@gz.msgs.Image',
-            '/rgbd/image_depth@sensor_msgs/msg/Image@gz.msgs.Image',
+            # rgbd_camera с <topic>/rgbd/image</topic> создаёт namespace /rgbd/image/
+            # и публикует sub-топики: /image, /depth_image, /camera_info, /points
+            '/rgbd/image/image@sensor_msgs/msg/Image@gz.msgs.Image',
+            '/rgbd/image/depth_image@sensor_msgs/msg/Image@gz.msgs.Image',
             '/rgbd/image/camera_info@sensor_msgs/msg/CameraInfo@gz.msgs.CameraInfo',
             '/tf@tf2_msgs/msg/TFMessage@gz.msgs.Pose_V',
             '/joint_states@sensor_msgs/msg/JointState@gz.msgs.Model',

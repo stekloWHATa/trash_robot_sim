@@ -70,9 +70,14 @@ except ImportError:
 #    ROS optical X  = SDF camera -Y  (правая сторона кадра)
 #    ROS optical Y  = SDF camera -Z  (вниз по кадру)
 
+# ── Используем NavCamera (/camera/image) для YOLO ──────────────────────── #
+#  pose relative_to='body': t=(0.6, 0, 0), R=Ry(+0.45 rad)
+#  Смотрит вперёд-чуть-вниз (~26°), тот же вид что показывает NavCamera в RViz.
+#  Тело робота (body) находится на высоте z=0.5м от пола → камера тоже на 0.5м.
+#  fov=1.0 рад, 640×480 → fx = fy = (320) / tan(0.5) ≈ 585.8
 CAM_TX    = 0.60   # м, смещение вперёд от body center
-CAM_TZ    = 0.83   # м, смещение вверх от body center (body centre at z=0.5)
-CAM_PITCH = 1.1    # рад, тангаж SDF-ссылки камеры (нос вниз)
+CAM_TZ    = 0.0    # м, камера на той же высоте что центр тела (z_floor ≈ 0.5м)
+CAM_PITCH = 0.45   # рад, тангаж NavCamera (слегка вниз)
 
 # ── Отображение COCO классов → категории мусора ──────────────────────────── #
 #  Ключ — COCO class id (0-based), значение — человекочитаемое имя.
@@ -101,16 +106,11 @@ COCO_TRASH_MAP = {
     77: 'appliance',        # hair drier
     78: 'hygiene',          # toothbrush
 
-    # ── Domain-gap: Gazebo-рендер ≠ реальное фото ─────────────────────────
-    # YOLO путает синтетические объекты с этими COCO-классами из-за
-    # непривычных ракурсов (камера 63° вниз) и отсутствия реальных текстур.
-    33: 'can_cup',          # kite   → Coke Can сверху (овальный цилиндр)
-    32: 'can_cup',          # sports ball → банка/бутылка сбоку (круглое)
-    29: 'misc_object',      # frisbee → круглый предмет на полу
-    28: 'cardboard_paper',  # suitcase → картонная коробка
-    26: 'misc_object',      # handbag → пакет/упаковка
-    25: 'misc_object',      # umbrella → вытянутый предмет сверху
-    24: 'cardboard_paper',  # backpack → рюкзак/мешок мусора
+    # ── Domain-gap: NavCamera смотрит вперёд, объекты видны нормально ───────
+    # Оставляем только классы с высокой вероятностью ложного срабатывания
+    # на наши конкретные объекты (банки, коробки).
+    28: 'cardboard_paper',  # suitcase → картонная коробка (похожая форма)
+    24: 'cardboard_paper',  # backpack → мешок мусора/пакет
 }
 
 # Цвета маркеров (r, g, b) для каждой категории
@@ -220,9 +220,10 @@ class Detector(Node):
         # ── Подписки ───────────────────────────────────────────────────── #
         self.create_subscription(Odometry,   '/odom',                        self._odom_cb,    10)
         self.create_subscription(CameraInfo, '/rgbd/image/camera_info',     self._caminfo_cb,  1)
-        # Gazebo Harmonic: rgbd_camera с <topic>/rgbd/image</topic>
-        # создаёт namespace /rgbd/image/ и публикует .../image, .../depth_image
-        self.create_subscription(Image,      '/rgbd/image/image',            self._rgb_cb,     10)
+        # RGB для YOLO — NavCamera (/camera/image): forward-facing, fov=1.0, pitch=0.45
+        # Тот же вид что показывает RViz NavCamera панель.
+        self.create_subscription(Image,      '/camera/image',                self._rgb_cb,     10)
+        # Depth — RGBD камера (вспомогательно для 3D-локализации)
         self.create_subscription(Image,      '/rgbd/image/depth_image',      self._depth_cb,   10)
 
         # ── Таймеры ────────────────────────────────────────────────────── #
@@ -293,18 +294,19 @@ class Detector(Node):
         if self._model is None or not self._odom_ok:
             return
 
-        # Если camera_info так и не пришёл — считаем интринсики из параметров SDF:
-        # horizontal_fov=1.5 рад, width=640, height=480
+        # Если camera_info так и не пришёл — считаем интринсики из параметров SDF
+        # NavCamera: horizontal_fov=1.0 рад, width=640, height=480
+        # fx = fy = (640/2) / tan(1.0/2) ≈ 585.8
         if self._K is None:
-            fov, w, h = 1.5, 640.0, 480.0
+            fov, w, h = 1.0, 640.0, 480.0
             fx = (w / 2.0) / math.tan(fov / 2.0)
             self._K = np.array(
                 [[fx, 0.0, w / 2.0],
                  [0.0, fx, h / 2.0],
                  [0.0, 0.0, 1.0]], dtype=np.float64)
             self.get_logger().warn(
-                f'/rgbd/camera_info не получен — используем расчётные интринсики '
-                f'из SDF: fx=fy={fx:.1f}, cx={w/2:.0f}, cy={h/2:.0f}'
+                f'camera_info не получен — используем NavCamera K: '
+                f'fx=fy={fx:.1f}, cx={w/2:.0f}, cy={h/2:.0f}'
             )
 
         with self._img_lock:

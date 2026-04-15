@@ -20,6 +20,7 @@ install(PROGRAMS
   scripts/map_builder.py
   scripts/map_check.py
   scripts/detector.py
+  scripts/train_yolo.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

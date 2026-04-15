@@ -203,6 +203,10 @@ class CoverageNavigator(Node):
         # Смещение вычисляется из первого сообщения /odom и этих параметров.
         self.declare_parameter('spawn_x', 0.0)
         self.declare_parameter('spawn_y', -2.0)
+        # Автоматически начать покрытие всей арены без /scan_area.
+        # False = ждать команды оператора вручную.
+        self.declare_parameter('auto_scan', True)
+        self.declare_parameter('auto_scan_margin', 1.5)  # отступ от стен, м
 
         self.row_spacing   = self.get_parameter('row_spacing').value
         self.area_margin   = self.get_parameter('area_margin').value
@@ -214,6 +218,8 @@ class CoverageNavigator(Node):
         self.waypoint_r    = self.get_parameter('waypoint_radius').value
         self._spawn_x      = self.get_parameter('spawn_x').value
         self._spawn_y      = self.get_parameter('spawn_y').value
+        self._auto_scan    = self.get_parameter('auto_scan').value
+        self._auto_margin  = self.get_parameter('auto_scan_margin').value
 
         self._grid      = np.zeros((GRID_N, GRID_N), dtype=bool)
         self._scan_grid = np.zeros((GRID_N, GRID_N), dtype=bool)
@@ -429,6 +435,19 @@ class CoverageNavigator(Node):
             1.0 - 2.0*(q.y*q.y + q.z*q.z),
         )
         self._odom_ok = True
+
+        # Авто-старт: при первом odom запускаем покрытие всей арены
+        if self._auto_scan and self._state == 'WAIT_AREA' and len(self._coverage_goals) == 0:
+            m = self._auto_margin
+            lim = MAP_HALF - m
+            self._coverage_goals = self._boustrophedon(-lim, -lim, lim, lim)
+            self._goal_idx = 0
+            self._state = 'PLANNING'
+            self.get_logger().info(
+                f'[AUTO] Старт покрытия арены ±{lim:.1f}м, '
+                f'{len(self._coverage_goals)} точек, шаг {self.row_spacing}м'
+            )
+            _flog.info(f'AUTO-SCAN started: {len(self._coverage_goals)} goals, margin={m}')
 
     # ── Детектор застревания ─────────────────────────────────────────────── #
 

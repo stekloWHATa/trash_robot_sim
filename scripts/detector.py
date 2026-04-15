@@ -77,9 +77,10 @@ CAM_PITCH = 1.1    # рад, тангаж SDF-ссылки камеры (нос 
 # ── Отображение COCO классов → категории мусора ──────────────────────────── #
 #  Ключ — COCO class id (0-based), значение — человекочитаемое имя.
 COCO_TRASH_MAP = {
+    # ── Прямые попадания (реальные объекты мусора в COCO) ─────────────────
     39: 'plastic_bottle',   # bottle
     40: 'glass_bottle',     # wine glass
-    41: 'can_cup',          # cup  (Coke Can от YOLO часто = cup)
+    41: 'can_cup',          # cup
     43: 'knife',            # knife
     44: 'spoon',            # spoon
     45: 'bowl',             # bowl
@@ -99,6 +100,17 @@ COCO_TRASH_MAP = {
     76: 'toy',              # teddy bear
     77: 'appliance',        # hair drier
     78: 'hygiene',          # toothbrush
+
+    # ── Domain-gap: Gazebo-рендер ≠ реальное фото ─────────────────────────
+    # YOLO путает синтетические объекты с этими COCO-классами из-за
+    # непривычных ракурсов (камера 63° вниз) и отсутствия реальных текстур.
+    33: 'can_cup',          # kite   → Coke Can сверху (овальный цилиндр)
+    32: 'can_cup',          # sports ball → банка/бутылка сбоку (круглое)
+    29: 'misc_object',      # frisbee → круглый предмет на полу
+    28: 'cardboard_paper',  # suitcase → картонная коробка
+    26: 'misc_object',      # handbag → пакет/упаковка
+    25: 'misc_object',      # umbrella → вытянутый предмет сверху
+    24: 'cardboard_paper',  # backpack → рюкзак/мешок мусора
 }
 
 # Цвета маркеров (r, g, b) для каждой категории

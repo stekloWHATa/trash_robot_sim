@@ -206,10 +206,12 @@ class Detector(Node):
             Image, '/detections_img', 10)
 
         # ── Подписки ───────────────────────────────────────────────────── #
-        self.create_subscription(Odometry,   '/odom',             self._odom_cb,    10)
-        self.create_subscription(CameraInfo, '/rgbd/camera_info', self._caminfo_cb,  1)
-        self.create_subscription(Image,      '/rgbd/image',       self._rgb_cb,     10)
-        self.create_subscription(Image,      '/rgbd/depth_image', self._depth_cb,   10)
+        self.create_subscription(Odometry,   '/odom',                   self._odom_cb,    10)
+        self.create_subscription(CameraInfo, '/rgbd/image/camera_info', self._caminfo_cb,  1)
+        self.create_subscription(Image,      '/rgbd/image',             self._rgb_cb,     10)
+        # В Gazebo Harmonic rgbd_camera с <topic>/rgbd/image</topic>
+        # публикует depth на /rgbd/image_depth (base + "_depth")
+        self.create_subscription(Image,      '/rgbd/image_depth',       self._depth_cb,   10)
 
         # ── Таймеры ────────────────────────────────────────────────────── #
         detect_period = 1.0 / max(0.5, self._rate)
@@ -294,10 +296,12 @@ class Detector(Node):
             )
 
         with self._img_lock:
-            if self._latest_rgb is None or self._latest_depth is None:
+            if self._latest_rgb is None:
                 return
             rgb   = self._latest_rgb.copy()
-            depth = self._latest_depth.copy()
+            # Depth необязателен: без него YOLO всё равно рисует bbox на кадре,
+            # но пространственные маркеры на карте не выставляются.
+            depth = self._latest_depth.copy() if self._latest_depth is not None else None
 
         results = self._model(rgb, conf=self._conf, verbose=False)
         if not results:
@@ -320,19 +324,17 @@ class Detector(Node):
             u = (x1 + x2) / 2.0
             v = (y1 + y2) / 2.0
 
-            # Глубина: медиана патча 11×11 вокруг центра bbox
-            d = self._sample_depth(depth, u, v)
-            if d is None:
-                continue
+            # Глубина: медиана патча вокруг центра bbox (None если depth не пришёл)
+            d = self._sample_depth(depth, u, v) if depth is not None else None
 
-            # Пространственная локализация: пиксель + глубина → мировые координаты
-            wx, wy = self._pixel_to_world(u, v, d)
-            if wx is None:
-                continue
-
-            if self._register(wx, wy, category, label, conf_val,
-                              annotated, (u, v, x1, y1, x2, y2)):
-                found_new = True
+            # Пространственная локализация: пиксель + глубина → мировые координаты.
+            # Если глубина недоступна — добавляем детекцию без 3D-маркера.
+            if d is not None:
+                wx, wy = self._pixel_to_world(u, v, d)
+                if wx is not None:
+                    if self._register(wx, wy, category, label, conf_val,
+                                      annotated, (u, v, x1, y1, x2, y2)):
+                        found_new = True
 
         if found_new:
             self._publish_markers()

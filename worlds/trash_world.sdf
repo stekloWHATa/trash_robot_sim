@@ -235,31 +235,80 @@
           <geometry><cylinder><radius>0.038</radius><length>0.31</length></cylinder></geometry></collision>
       </link></model>
 
-    <!-- ── КАРТОННЫЕ КОРОБКИ (Fuel mesh) — YOLO: suitcase ───────────── -->
-    <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Cardboard Box</uri>
-      <name>box_1</name><pose>-2.5  8.5 0 0 0 0.5</pose>
-    </include>
-    <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Cardboard Box</uri>
-      <name>box_2</name><pose> 10.5 -5.0 0 0 0 1.0</pose>
-    </include>
-    <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Cardboard Box</uri>
-      <name>box_3</name><pose>-7.5  7.0 0 0 0 0.7</pose>
-    </include>
-    <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Cardboard Box</uri>
-      <name>box_4</name><pose>-9.5 -7.0 0 0 0 1.2</pose>
-    </include>
-    <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Cardboard Box</uri>
-      <name>box_5</name><pose>-4.5 -8.0 0 0 0 0.3</pose>
-    </include>
-    <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Cardboard Box</uri>
-      <name>box_6</name><pose> 7.0  11.0 0 0 0 0.9</pose>
-    </include>
+    <!-- ── КАРТОННЫЕ КОРОБКИ (кастомный SDF, без Fuel-текстур) ─────────
+         YOLO: backpack(24) / suitcase(28) / book(72)
+         Размер ≈ большой коробки: 40×30×32 см, цвет крафт-картон       -->
+    <model name="cardboard_box_1"><static>true</static><pose>-2.5  8.5 0.16 0 0 0.5</pose>
+      <link name="link">
+        <visual name="body">
+          <geometry><box><size>0.40 0.30 0.32</size></box></geometry>
+          <material><ambient>0.68 0.50 0.26 1</ambient><diffuse>0.75 0.56 0.30 1</diffuse>
+            <specular>0.04 0.03 0.01 1</specular></material></visual>
+        <visual name="seam_h"><pose>0 0 0.02 0 0 0</pose>
+          <geometry><box><size>0.401 0.301 0.005</size></box></geometry>
+          <material><ambient>0.55 0.40 0.20 1</ambient><diffuse>0.60 0.44 0.22 1</diffuse></material></visual>
+        <collision name="c"><geometry><box><size>0.40 0.30 0.32</size></box></geometry></collision>
+      </link></model>
+
+    <model name="cardboard_box_2"><static>true</static><pose> 10.5 -5.0 0.16 0 0 1.0</pose>
+      <link name="link">
+        <visual name="body">
+          <geometry><box><size>0.40 0.30 0.32</size></box></geometry>
+          <material><ambient>0.68 0.50 0.26 1</ambient><diffuse>0.75 0.56 0.30 1</diffuse>
+            <specular>0.04 0.03 0.01 1</specular></material></visual>
+        <visual name="seam_h"><pose>0 0 0.02 0 0 0</pose>
+          <geometry><box><size>0.401 0.301 0.005</size></box></geometry>
+          <material><ambient>0.55 0.40 0.20 1</ambient><diffuse>0.60 0.44 0.22 1</diffuse></material></visual>
+        <collision name="c"><geometry><box><size>0.40 0.30 0.32</size></box></geometry></collision>
+      </link></model>
+
+    <model name="cardboard_box_3"><static>true</static><pose>-7.5  7.0 0.16 0 0 0.7</pose>
+      <link name="link">
+        <visual name="body">
+          <geometry><box><size>0.40 0.30 0.32</size></box></geometry>
+          <material><ambient>0.68 0.50 0.26 1</ambient><diffuse>0.75 0.56 0.30 1</diffuse>
+            <specular>0.04 0.03 0.01 1</specular></material></visual>
+        <visual name="seam_h"><pose>0 0 0.02 0 0 0</pose>
+          <geometry><box><size>0.401 0.301 0.005</size></box></geometry>
+          <material><ambient>0.55 0.40 0.20 1</ambient><diffuse>0.60 0.44 0.22 1</diffuse></material></visual>
+        <collision name="c"><geometry><box><size>0.40 0.30 0.32</size></box></geometry></collision>
+      </link></model>
+
+    <model name="cardboard_box_4"><static>true</static><pose>-9.5 -7.0 0.16 0 0 1.2</pose>
+      <link name="link">
+        <visual name="body">
+          <geometry><box><size>0.40 0.30 0.32</size></box></geometry>
+          <material><ambient>0.68 0.50 0.26 1</ambient><diffuse>0.75 0.56 0.30 1</diffuse>
+            <specular>0.04 0.03 0.01 1</specular></material></visual>
+        <visual name="seam_h"><pose>0 0 0.02 0 0 0</pose>
+          <geometry><box><size>0.401 0.301 0.005</size></box></geometry>
+          <material><ambient>0.55 0.40 0.20 1</ambient><diffuse>0.60 0.44 0.22 1</diffuse></material></visual>
+        <collision name="c"><geometry><box><size>0.40 0.30 0.32</size></box></geometry></collision>
+      </link></model>
+
+    <model name="cardboard_box_5"><static>true</static><pose>-4.5 -8.0 0.16 0 0 0.3</pose>
+      <link name="link">
+        <visual name="body">
+          <geometry><box><size>0.40 0.30 0.32</size></box></geometry>
+          <material><ambient>0.68 0.50 0.26 1</ambient><diffuse>0.75 0.56 0.30 1</diffuse>
+            <specular>0.04 0.03 0.01 1</specular></material></visual>
+        <visual name="seam_h"><pose>0 0 0.02 0 0 0</pose>
+          <geometry><box><size>0.401 0.301 0.005</size></box></geometry>
+          <material><ambient>0.55 0.40 0.20 1</ambient><diffuse>0.60 0.44 0.22 1</diffuse></material></visual>
+        <collision name="c"><geometry><box><size>0.40 0.30 0.32</size></box></geometry></collision>
+      </link></model>
+
+    <model name="cardboard_box_6"><static>true</static><pose> 7.0  11.0 0.16 0 0 0.9</pose>
+      <link name="link">
+        <visual name="body">
+          <geometry><box><size>0.40 0.30 0.32</size></box></geometry>
+          <material><ambient>0.68 0.50 0.26 1</ambient><diffuse>0.75 0.56 0.30 1</diffuse>
+            <specular>0.04 0.03 0.01 1</specular></material></visual>
+        <visual name="seam_h"><pose>0 0 0.02 0 0 0</pose>
+          <geometry><box><size>0.401 0.301 0.005</size></box></geometry>
+          <material><ambient>0.55 0.40 0.20 1</ambient><diffuse>0.60 0.44 0.22 1</diffuse></material></visual>
+        <collision name="c"><geometry><box><size>0.40 0.30 0.32</size></box></geometry></collision>
+      </link></model>
 
     <!-- ── БЫЧКИ СИГАРЕТНЫЕ — лежат на полу ─────────────────────────
          Тело: жёлто-коричневый цилиндр (табак)

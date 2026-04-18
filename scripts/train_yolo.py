@@ -48,7 +48,7 @@ EPOCHS      = 50       # 50 хватает для fine-tune; 100 дадут чу
 IMGSZ       = 640
 BATCH       = 8        # уменьшить до 4 если OOM на GPU
 PATIENCE    = 10       # early stopping
-DEVICE      = 'auto'   # 'cpu', '0' (GPU), 'auto'
+DEVICE      = '0'      # GPU (NVIDIA). Если ошибка — поменяй на 'cpu'
 
 # ── Маппинг TACO 28 суперкатегорий → наши категории ─────────────────────── #
 # TACO supers: Bottle, Can, Carton, Cup, Lid, Other plastic, Paper, Plastic bag,
@@ -57,34 +57,66 @@ DEVICE      = 'auto'   # 'cpu', '0' (GPU), 'auto'
 #              Broken glass, Food waste, Glass jar, Battery, Blister pack,
 #              Foam sponge, Plastic container, Squeezable tube, Wrapping foil, Rubber glove
 TACO_CATEGORY_MAP = {
-    'Bottle':             'plastic_bottle',
-    'Can':                'can_cup',
-    'Carton':             'cardboard_paper',
-    'Cup':                'can_cup',
-    'Lid':                'can_cup',
-    'Plastic bag':        'misc_object',
-    'Paper':              'cardboard_paper',
-    'Paper bag':          'cardboard_paper',
-    'Cigarette':          'cigarette',
-    'Plastic film':       'misc_object',
-    'Styrofoam':          'misc_object',
-    'Food waste':         'organic_waste',
-    'Broken glass':       'glass_bottle',
-    'Glass jar':          'glass_bottle',
-    'Scrap metal':        'misc_object',
-    'Rubber glove':       'hygiene',
-    'Straw':              'misc_object',
-    'Pop tab':            'can_cup',
-    'Blister pack':       'hygiene',
-    'Plastic container':  'plastic_bottle',
-    'Battery':            'electronics',
-    'Foam sponge':        'misc_object',
-    'Wrapping foil':      'misc_object',
-    'Squeezable tube':    'hygiene',
-    'Rope/Strings':       'misc_object',
-    'Shoe':               'misc_object',
-    'Unlabeled litter':   'misc_object',
-    'Other plastic':      'misc_object',
+    # Точные имена классов из TACO v15 на Roboflow (59 классов)
+    'Aerosol':                    'misc_object',
+    'Aluminium blister pack':     'hygiene',
+    'Aluminium foil':             'misc_object',
+    'Battery':                    'electronics',
+    'Broken glass':               'glass_bottle',
+    'Carded blister pack':        'hygiene',
+    'Cigarette':                  'cigarette',
+    'Clear plastic bottle':       'plastic_bottle',
+    'Corrugated carton':          'cardboard_paper',
+    'Crisp packet':               'misc_object',
+    'Disposable food container':  'misc_object',
+    'Disposable plastic cup':     'can_cup',
+    'Drink can':                  'can_cup',
+    'Drink carton':               'cardboard_paper',
+    'Egg carton':                 'cardboard_paper',
+    'Foam cup':                   'can_cup',
+    'Foam food container':        'misc_object',
+    'Food Can':                   'can_cup',
+    'Food waste':                 'organic_waste',
+    'Garbage bag':                'misc_object',
+    'Glass bottle':               'glass_bottle',
+    'Glass cup':                  'can_cup',
+    'Glass jar':                  'glass_bottle',
+    'Magazine paper':             'cardboard_paper',
+    'Meal carton':                'cardboard_paper',
+    'Metal bottle cap':           'misc_object',
+    'Metal lid':                  'misc_object',
+    'Normal paper':               'cardboard_paper',
+    'Other carton':               'cardboard_paper',
+    'Other plastic bottle':       'plastic_bottle',
+    'Other plastic container':    'plastic_bottle',
+    'Other plastic cup':          'can_cup',
+    'Other plastic wrapper':      'misc_object',
+    'Other plastic':              'misc_object',
+    'Paper bag':                  'cardboard_paper',
+    'Paper cup':                  'can_cup',
+    'Paper straw':                'misc_object',
+    'Pizza box':                  'cardboard_paper',
+    'Plastic bottle cap':         'misc_object',
+    'Plastic film':               'misc_object',
+    'Plastic glooves':            'hygiene',
+    'Plastic lid':                'misc_object',
+    'Plastic straw':              'misc_object',
+    'Plastic utensils':           'misc_object',
+    'Polypropylene bag':          'misc_object',
+    'Pop tab':                    'can_cup',
+    'Rope - strings':             'misc_object',
+    'Scrap metal':                'misc_object',
+    'Shoe':                       'misc_object',
+    'Single-use carrier bag':     'misc_object',
+    'Six pack rings':             'misc_object',
+    'Spread tub':                 'misc_object',
+    'Squeezable tube':            'hygiene',
+    'Styrofoam piece':            'misc_object',
+    'Tissues':                    'hygiene',
+    'Toilet tube':                'cardboard_paper',
+    'Tupperware':                 'plastic_bottle',
+    'Unlabeled litter':           'misc_object',
+    'Wrapping paper':             'misc_object',
 }
 
 OUR_CLASSES = sorted(set(TACO_CATEGORY_MAP.values()))
@@ -92,19 +124,59 @@ OUR_CLASSES = sorted(set(TACO_CATEGORY_MAP.values()))
 
 def download_taco_roboflow(api_key: str, dest: str):
     """Скачивает TACO с Roboflow в формате YOLOv8."""
+    import time
+    import zipfile
     try:
         from roboflow import Roboflow
     except ImportError:
         print('[ERROR] roboflow не установлен. Запустите: pip install roboflow')
         sys.exit(1)
 
-    print(f'[INFO] Загрузка TACO с Roboflow...')
+    print('[INFO] Загрузка TACO с Roboflow...')
     rf = Roboflow(api_key=api_key)
     project = rf.workspace('material-identification').project(
         'taco-trash-annotations-in-context')
-    dataset = project.version(18).download('yolov8', location=dest)
-    print(f'[INFO] Датасет сохранён: {dest}')
-    return dataset.location
+    version = project.version(15)
+
+    # Триггерим генерацию экспорта
+    print('[INFO] Генерация экспорта YOLOv8 (асинхронно)...')
+    version.export('yolov8')
+
+    # Скачиваем с retry — экспорт генерируется 10-30 секунд
+    zip_path = os.path.join(dest, 'roboflow.zip')
+    for attempt in range(1, 13):
+        # Удаляем битый файл если есть
+        if os.path.isfile(zip_path):
+            os.remove(zip_path)
+        print(f'[INFO] Попытка скачивания {attempt}/12...')
+        try:
+            dataset = version.download('yolov8', location=dest, overwrite=True)
+            # Проверяем что zip валидный
+            if os.path.isfile(zip_path):
+                try:
+                    with zipfile.ZipFile(zip_path):
+                        pass
+                except zipfile.BadZipFile:
+                    print(f'[WARN] Экспорт ещё не готов, ждём 15с...')
+                    time.sleep(15)
+                    continue
+            print(f'[INFO] Датасет сохранён: {dataset.location}')
+            return dataset.location
+        except Exception as e:
+            if 'BadZipFile' in str(type(e).__name__) or 'not a zip' in str(e).lower():
+                print(f'[WARN] Экспорт ещё не готов, ждём 15с...')
+                time.sleep(15)
+            else:
+                print(f'[ERROR] {e}')
+                sys.exit(1)
+
+    print('[ERROR] Экспорт так и не сгенерировался за 3 минуты.')
+    print('[INFO] Попробуйте скачать вручную:')
+    print('  1. Откройте https://universe.roboflow.com/material-identification/taco-trash-annotations-in-context/15')
+    print('  2. Export → YOLOv8 → download zip')
+    print(f'  3. Распакуйте в {dest}')
+    print(f'  4. Запустите: python3 train_yolo.py --skip-download')
+    sys.exit(1)
 
 
 def make_data_yaml(data_dir: str) -> str:
@@ -174,20 +246,20 @@ def remap_labels(data_dir: str, taco_class_file: str):
     print(f'[INFO] Переразмечено: {remapped} боксов, пропущено: {skipped}')
 
 
-def train(data_yaml: str, output_path: str):
+def train(data_yaml: str, output_path: str, epochs: int = EPOCHS, batch: int = BATCH):
     """Запускает fine-tuning YOLOv8n на TACO."""
     print(f'\n[INFO] Загрузка базовой модели: {BASE_MODEL}')
     model = YOLO(BASE_MODEL)
 
-    print(f'[INFO] Запуск обучения: epochs={EPOCHS}, imgsz={IMGSZ}, batch={BATCH}')
+    print(f'[INFO] Запуск обучения: epochs={epochs}, imgsz={IMGSZ}, batch={batch}')
     print(f'[INFO] Устройство: {DEVICE}')
     print('[INFO] Это займёт 2-4 часа на GPU или ~12ч на CPU...\n')
 
     results = model.train(
         data=data_yaml,
-        epochs=EPOCHS,
+        epochs=epochs,
         imgsz=IMGSZ,
-        batch=BATCH,
+        batch=batch,
         patience=PATIENCE,
         device=DEVICE,
         project=os.path.join(PACKAGE_DIR, 'data', 'runs'),
@@ -246,10 +318,6 @@ def main():
         '--batch', type=int, default=BATCH)
     args = parser.parse_args()
 
-    global EPOCHS, BATCH
-    EPOCHS = args.epochs
-    BATCH  = args.batch
-
     os.makedirs(args.data_dir, exist_ok=True)
     os.makedirs(MODELS_DIR, exist_ok=True)
 
@@ -285,28 +353,21 @@ def main():
             print(f'[INFO] Проверьте структуру датасета в {args.data_dir}')
             sys.exit(1)
 
-    # ── Шаг 3: Перемаппинг классов ────────────────────────────────────────── #
-    taco_classes_file = os.path.join(args.data_dir, 'data.yaml')
-    if os.path.isfile(taco_classes_file):
-        # Читаем классы из оригинального data.yaml
-        import yaml  # pyyaml входит в ultralytics
-        with open(taco_classes_file) as f:
-            orig = yaml.safe_load(f)
-        taco_class_names = orig.get('names', [])
-        # Записываем во временный classes.txt для remap_labels
-        tmp_classes = os.path.join(args.data_dir, '_taco_classes.txt')
-        with open(tmp_classes, 'w') as f:
-            f.write('\n'.join(taco_class_names))
-        remap_labels(args.data_dir, tmp_classes)
-        os.remove(tmp_classes)
-    else:
-        print('[WARN] data.yaml не найден — пропускаем перемаппинг классов')
-
-    # ── Шаг 4: Создать data.yaml для обучения ────────────────────────────── #
-    yaml_path = make_data_yaml(args.data_dir)
+    # ── Шаг 3: Фиксируем path в data.yaml (Roboflow пишет relative пути) ─── #
+    import yaml
+    yaml_path = os.path.join(args.data_dir, 'data.yaml')
+    with open(yaml_path) as f:
+        cfg = yaml.safe_load(f)
+    cfg['path'] = args.data_dir
+    cfg['train'] = 'train/images'
+    cfg['val']   = 'valid/images'
+    cfg['test']  = 'test/images'
+    with open(yaml_path, 'w') as f:
+        yaml.dump(cfg, f, allow_unicode=True)
+    print(f'[INFO] data.yaml обновлён: {len(cfg["names"])} классов TACO')
 
     # ── Шаг 5: Обучение ──────────────────────────────────────────────────── #
-    train(yaml_path, OUTPUT_MODEL)
+    train(yaml_path, OUTPUT_MODEL, epochs=args.epochs, batch=args.batch)
 
     print('\n=== Готово ===')
     print(f'Обученная модель: {OUTPUT_MODEL}')

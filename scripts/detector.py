@@ -162,12 +162,17 @@ class Detector(Node):
         # ── Загрузка YOLOv8 ────────────────────────────────────────────── #
         model_path = self.get_parameter('model_path').value
         self._model = None
+        self._is_coco = True  # до загрузки — безопасный default
         if _YOLO_OK:
             if os.path.isfile(model_path):
                 self.get_logger().info(f'Загружаю YOLOv8: {model_path}')
                 self._model = YOLO(model_path)
                 self._model.fuse()
-                self.get_logger().info('YOLOv8 готов')
+                # Определяем тип модели: COCO (80 кл, есть 'person') → фильтр по карте.
+                # TACO/fine-tuned (нет 'person') → все классы = мусор.
+                self._is_coco = 'person' in self._model.names.values()
+                mode = 'COCO (фильтр по карте)' if self._is_coco else 'TACO/fine-tuned (все классы = мусор)'
+                self.get_logger().info(f'YOLOv8 готов, режим: {mode}')
             else:
                 self.get_logger().warn(
                     f'Файл модели не найден: {model_path}\n'
@@ -326,12 +331,18 @@ class Detector(Node):
 
         found_new = False
         for box in det.boxes:
-            cls_id = int(box.cls[0].item())
-            if cls_id not in COCO_TRASH_MAP:
-                continue
-            category = COCO_TRASH_MAP[cls_id]
+            cls_id   = int(box.cls[0].item())
             conf_val = float(box.conf[0].item())
             label    = det.names[cls_id]
+
+            if self._is_coco:
+                # Базовая COCO: принимаем только классы из карты мусора
+                if cls_id not in COCO_TRASH_MAP:
+                    continue
+                category = COCO_TRASH_MAP[cls_id]
+            else:
+                # Fine-tuned TACO: все классы = мусор, категория = имя класса
+                category = label.lower().replace(' ', '_').replace('-', '_')
 
             # Центр bbox в пикселях
             x1, y1, x2, y2 = box.xyxy[0].tolist()

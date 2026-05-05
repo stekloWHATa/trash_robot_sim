@@ -80,6 +80,10 @@ ros2 launch trash_robot_sim rviz.launch.py
 - лог детектора: `/tmp/trash_detections.jsonl`;
 - кропы новых объектов: `/tmp/trash_detected`.
 
+Модели мусора подключены как скачанные `.glb` mesh-assets из Poly Pizza
+(`models/trash/ASSET_SOURCES.md`): Kenney/Quaternius CC0 и один CC-BY окурок
+Poly by Google.
+
 Статичный запуск без scripted motion:
 
 ```bash

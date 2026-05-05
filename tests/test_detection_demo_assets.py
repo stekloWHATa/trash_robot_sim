@@ -22,8 +22,22 @@ def test_detection_demo_world_matches_ground_truth_and_local_models():
         model_name = includes[obj['id']].replace('model://', '')
         model_dir = ROOT / 'models' / 'trash' / model_name
         assert model_dir.is_dir()
-        assert (model_dir / 'model.sdf').is_file()
+        model_sdf = model_dir / 'model.sdf'
+        assert model_sdf.is_file()
         assert (model_dir / 'model.config').is_file()
+
+        model_tree = ET.parse(model_sdf)
+        mesh_uri = model_tree.findtext('.//mesh/uri')
+        assert mesh_uri is not None
+        assert mesh_uri.endswith('.glb')
+        mesh_path = model_dir / mesh_uri.replace(f'model://{model_name}/', '')
+        assert mesh_path.is_file()
+
+        scale_text = model_tree.findtext('.//mesh/scale')
+        assert scale_text is not None
+        scale = [float(value) for value in scale_text.split()]
+        assert len(scale) == 3
+        assert max(scale) <= 1.5
 
 
 def test_detection_demo_launch_is_detector_focused():

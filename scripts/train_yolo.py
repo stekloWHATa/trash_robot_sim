@@ -19,12 +19,12 @@ train_yolo.py — дообучение YOLOv8n на нескольких дат�
   python3 scripts/train_yolo.py --skip-download --epochs 50
 """
 
-import os, sys, shutil, argparse, glob
+import os, sys, shutil, argparse, glob, json
 
 try:
     from ultralytics import YOLO
 except ImportError:
-    print('[ERROR] pip install ultralytics'); sys.exit(1)
+    YOLO = None
 
 # ── Пути ─────────────────────────────────────────────────────────────────── #
 SCRIPT_DIR   = os.path.dirname(os.path.abspath(__file__))
@@ -33,7 +33,7 @@ MODELS_DIR   = os.path.join(PACKAGE_DIR, 'models')
 BASE_MODEL   = os.path.join(MODELS_DIR, 'yolov8n.pt')
 OUTPUT_MODEL = os.path.join(MODELS_DIR, 'yolov8n_trash.pt')
 DATA_ROOT    = os.path.join(PACKAGE_DIR, 'data')
-MERGED_DIR   = os.path.join(DATA_ROOT, 'merged')
+MERGED_DIR   = os.path.join(DATA_ROOT, 'merged_v2')
 
 # ── Параметры обучения ────────────────────────────────────────────────────── #
 EPOCHS   = 100
@@ -117,13 +117,83 @@ def fix_yaml_paths(data_dir):
     return cfg
 
 
-def merge_datasets(dataset_dirs):
+def _normalize_class_name(name):
+    return str(name).strip().lower().replace('-', ' ').replace('_', ' ')
+
+
+def load_class_config(path):
+    cfg = read_yaml(path)
+    classes = list(cfg.get('canonical_classes', []))
+    ignored = {
+        _normalize_class_name(name)
+        for name in cfg.get('ignored_classes', [])
+    }
+    alias_to_class = {}
+    for cls in classes:
+        alias_to_class[_normalize_class_name(cls)] = cls
+    for cls, aliases in (cfg.get('aliases', {}) or {}).items():
+        canonical = cls if cls in classes else _normalize_class_name(cls).replace(' ', '_')
+        if canonical in classes:
+            alias_to_class[_normalize_class_name(cls)] = canonical
+            for alias in aliases or []:
+                alias_to_class[_normalize_class_name(alias)] = canonical
+    return {
+        'classes': classes,
+        'alias_to_class': alias_to_class,
+        'ignored': ignored,
+    }
+
+
+def _map_class(name, class_config):
+    normalized = _normalize_class_name(name)
+    if normalized in class_config.get('ignored', set()):
+        return None
+    return class_config.get('alias_to_class', {}).get(normalized)
+
+
+def _yolo_polygon_to_bbox(values):
+    coords = [float(v) for v in values]
+    xs = coords[0::2]
+    ys = coords[1::2]
+    x1, x2 = min(xs), max(xs)
+    y1, y2 = min(ys), max(ys)
+    xc = (x1 + x2) / 2.0
+    yc = (y1 + y2) / 2.0
+    bw = x2 - x1
+    bh = y2 - y1
+    return [xc, yc, bw, bh]
+
+
+def _convert_yolo_line(line, remap):
+    parts = line.strip().split()
+    if not parts:
+        return None, None
+    old_id = int(parts[0])
+    if old_id not in remap:
+        return None, old_id
+    values = parts[1:]
+    if len(values) == 4:
+        return f'{remap[old_id]} ' + ' '.join(values), old_id
+    elif len(values) >= 6 and len(values) % 2 == 0:
+        bbox = _yolo_polygon_to_bbox(values)
+    else:
+        return None, old_id
+    return (
+        f'{remap[old_id]} '
+        f'{bbox[0]:.6f} {bbox[1]:.6f} {bbox[2]:.6f} {bbox[3]:.6f}',
+        old_id,
+    )
+
+
+def merge_datasets(dataset_dirs, class_config=None, output_dir=None):
     """
     Объединяет несколько датасетов в один.
     Возвращает путь к объединённому data.yaml.
     """
+    output_dir = output_dir or MERGED_DIR
+
     # ── 1. Собираем все уникальные классы ────────────────────────────────── #
-    all_classes = []   # сохраняем порядок первого появления
+    all_classes = list(class_config['classes']) if class_config else []
     seen = set()
     ds_configs = []
 
@@ -137,11 +207,12 @@ def merge_datasets(dataset_dirs):
         if isinstance(names, dict):
             names = [names[i] for i in sorted(names)]
         ds_configs.append((d, names))
-        for n in names:
-            nl = n.lower().strip()
-            if nl not in seen:
-                seen.add(nl)
-                all_classes.append(n)
+        if not class_config:
+            for n in names:
+                nl = n.lower().strip()
+                if nl not in seen:
+                    seen.add(nl)
+                    all_classes.append(n)
         print(f'[INFO] {os.path.basename(d)}: {len(names)} классов — {names}')
 
     print(f'\n[INFO] Объединённых классов: {len(all_classes)}')
@@ -152,18 +223,25 @@ def merge_datasets(dataset_dirs):
     unified_idx = {c.lower().strip(): i for i, c in enumerate(all_classes)}
 
     # ── 3. Копируем изображения и перемаппируем метки ────────────────────── #
-    shutil.rmtree(MERGED_DIR, ignore_errors=True)
+    shutil.rmtree(output_dir, ignore_errors=True)
     for split in ('train', 'valid', 'test'):
-        os.makedirs(os.path.join(MERGED_DIR, split, 'images'), exist_ok=True)
-        os.makedirs(os.path.join(MERGED_DIR, split, 'labels'), exist_ok=True)
+        os.makedirs(os.path.join(output_dir, split, 'images'), exist_ok=True)
+        os.makedirs(os.path.join(output_dir, split, 'labels'), exist_ok=True)
 
     total_imgs = 0
+    boxes_kept = 0
+    boxes_skipped = 0
+    skipped_by_class = {}
     for d, names in ds_configs:
         ds_name = os.path.basename(d)
         # Строим маппинг: старый ID → новый ID
         remap = {}
         for old_id, name in enumerate(names):
-            new_id = unified_idx.get(name.lower().strip())
+            if class_config:
+                mapped = _map_class(name, class_config)
+                new_id = unified_idx.get(mapped.lower().strip()) if mapped else None
+            else:
+                new_id = unified_idx.get(name.lower().strip())
             if new_id is not None:
                 remap[old_id] = new_id
 
@@ -182,22 +260,27 @@ def merge_datasets(dataset_dirs):
                 ext = os.path.splitext(fname)[1]
 
                 # Копируем изображение
-                dst_img = os.path.join(MERGED_DIR, split, 'images', new_stem + ext)
+                dst_img = os.path.join(output_dir, split, 'images', new_stem + ext)
                 shutil.copy2(img_path, dst_img)
 
                 # Перемаппируем метку
                 src_lbl = os.path.join(lbl_dir, stem + '.txt')
-                dst_lbl = os.path.join(MERGED_DIR, split, 'labels', new_stem + '.txt')
+                dst_lbl = os.path.join(output_dir, split, 'labels', new_stem + '.txt')
                 new_lines = []
                 if os.path.isfile(src_lbl):
                     with open(src_lbl) as f:
                         for line in f:
-                            parts = line.strip().split()
-                            if not parts:
-                                continue
-                            old_id = int(parts[0])
-                            if old_id in remap:
-                                new_lines.append(f'{remap[old_id]} ' + ' '.join(parts[1:]))
+                            converted, old_id = _convert_yolo_line(line, remap)
+                            if converted is not None:
+                                new_lines.append(converted)
+                                boxes_kept += 1
+                            elif old_id is not None:
+                                boxes_skipped += 1
+                                if 0 <= old_id < len(names):
+                                    skipped_name = names[old_id]
+                                else:
+                                    skipped_name = str(old_id)
+                                skipped_by_class[skipped_name] = skipped_by_class.get(skipped_name, 0) + 1
                 with open(dst_lbl, 'w') as f:
                     f.write('\n'.join(new_lines) + ('\n' if new_lines else ''))
 
@@ -206,20 +289,89 @@ def merge_datasets(dataset_dirs):
     print(f'\n[INFO] Скопировано изображений: {total_imgs}')
 
     # ── 4. Создаём data.yaml для объединённого датасета ───────────────────── #
-    merged_yaml = os.path.join(MERGED_DIR, 'data.yaml')
+    merged_yaml = os.path.join(output_dir, 'data.yaml')
     write_yaml(merged_yaml, {
-        'path':  MERGED_DIR,
+        'path':  output_dir,
         'train': 'train/images',
         'val':   'valid/images',
         'test':  'test/images',
         'nc':    len(all_classes),
         'names': all_classes,
     })
+    write_yaml(os.path.join(output_dir, 'merge_report.yaml'), {
+        'images': total_imgs,
+        'boxes_kept': boxes_kept,
+        'boxes_skipped': boxes_skipped,
+        'skipped_by_class': skipped_by_class,
+    })
     print(f'[INFO] Объединённый датасет: {merged_yaml}')
     return merged_yaml
 
 
+def convert_coco_to_yolo(coco_json, images_dir, output_dir, split='train', class_config=None):
+    with open(coco_json, encoding='utf-8') as f:
+        coco = json.load(f)
+    classes = list(class_config['classes']) if class_config else [
+        c['name'] for c in coco.get('categories', [])
+    ]
+    class_to_idx = {name: i for i, name in enumerate(classes)}
+    cat_to_class = {}
+    for cat in coco.get('categories', []):
+        name = cat['name']
+        mapped = _map_class(name, class_config) if class_config else name
+        if mapped in class_to_idx:
+            cat_to_class[cat['id']] = mapped
+
+    image_by_id = {img['id']: img for img in coco.get('images', [])}
+    labels_by_image = {img_id: [] for img_id in image_by_id}
+    for ann in coco.get('annotations', []):
+        mapped = cat_to_class.get(ann.get('category_id'))
+        if mapped is None:
+            continue
+        img = image_by_id.get(ann.get('image_id'))
+        if img is None:
+            continue
+        x, y, w, h = [float(v) for v in ann['bbox']]
+        if img.get('width', 0) <= 0 or img.get('height', 0) <= 0:
+            continue
+        xc = (x + w / 2.0) / float(img['width'])
+        yc = (y + h / 2.0) / float(img['height'])
+        bw = w / float(img['width'])
+        bh = h / float(img['height'])
+        labels_by_image[img['id']].append(
+            f'{class_to_idx[mapped]} {xc:.6f} {yc:.6f} {bw:.6f} {bh:.6f}'
+        )
+
+    img_out = os.path.join(output_dir, split, 'images')
+    lbl_out = os.path.join(output_dir, split, 'labels')
+    os.makedirs(img_out, exist_ok=True)
+    os.makedirs(lbl_out, exist_ok=True)
+    for img_id, img in image_by_id.items():
+        src = os.path.join(images_dir, img['file_name'])
+        dst = os.path.join(img_out, os.path.basename(img['file_name']))
+        if os.path.isfile(src):
+            shutil.copy2(src, dst)
+        stem = os.path.splitext(os.path.basename(img['file_name']))[0]
+        with open(os.path.join(lbl_out, stem + '.txt'), 'w') as f:
+            lines = labels_by_image.get(img_id, [])
+            f.write('\n'.join(lines) + ('\n' if lines else ''))
+
+    data_yaml = os.path.join(output_dir, 'data.yaml')
+    write_yaml(data_yaml, {
+        'path': output_dir,
+        'train': 'train/images',
+        'val': 'valid/images',
+        'test': 'test/images',
+        'nc': len(classes),
+        'names': classes,
+    })
+    return data_yaml
+
+
 def train(data_yaml, output_path, epochs=EPOCHS, batch=BATCH):
+    if YOLO is None:
+        print('[ERROR] pip install ultralytics')
+        sys.exit(1)
     print(f'\n[INFO] Модель: {BASE_MODEL}')
     print(f'[INFO] epochs={epochs}, batch={batch}, device={DEVICE}')
     model = YOLO(BASE_MODEL)

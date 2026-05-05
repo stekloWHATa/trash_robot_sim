@@ -3,14 +3,18 @@
   <model name="plastic_bag">
     <static>true</static>
     <link name="link">
-      <visual name="textured_mesh">
+      <visual name="poly_pizza_mesh">
+        <pose>0 0 0 1.5708 0 0</pose>
         <geometry>
-          <mesh><uri>model://plastic_bag/meshes/plastic_bag.obj</uri></mesh>
+          <mesh>
+            <uri>model://plastic_bag/meshes/trash_bag_quaternius.glb</uri>
+            <scale>0.55 0.55 0.55</scale>
+          </mesh>
         </geometry>
       </visual>
       <collision name="collision">
-        <pose>0 0 0.0400 0 0 0</pose>
-        <geometry><box><size>0.620 0.450 0.080</size></box></geometry>
+        <pose>0 0 0.15 0 0 0</pose>
+        <geometry><box><size>0.30 0.28 0.30</size></box></geometry>
       </collision>
     </link>
   </model>

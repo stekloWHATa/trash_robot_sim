@@ -3,44 +3,18 @@
   <model name="cigarette_butt">
     <static>true</static>
     <link name="link">
-      <visual name="white_paper">
-        <pose>0.010 0 0.018 0 1.5708 0</pose>
-        <geometry><cylinder><radius>0.010</radius><length>0.060</length></cylinder></geometry>
-        <material>
-          <ambient>0.86 0.86 0.80 1</ambient>
-          <diffuse>0.98 0.98 0.92 1</diffuse>
-          <specular>0.06 0.06 0.06 1</specular>
-        </material>
-      </visual>
-      <visual name="orange_filter">
-        <pose>-0.035 0 0.018 0 1.5708 0</pose>
-        <geometry><cylinder><radius>0.0105</radius><length>0.035</length></cylinder></geometry>
-        <material>
-          <ambient>0.70 0.36 0.08 1</ambient>
-          <diffuse>0.94 0.55 0.16 1</diffuse>
-          <specular>0.04 0.03 0.02 1</specular>
-        </material>
-      </visual>
-      <visual name="burnt_tip">
-        <pose>0.049 0 0.018 0 1.5708 0</pose>
-        <geometry><cylinder><radius>0.0105</radius><length>0.016</length></cylinder></geometry>
-        <material>
-          <ambient>0.08 0.07 0.06 1</ambient>
-          <diffuse>0.18 0.16 0.14 1</diffuse>
-          <specular>0.02 0.02 0.02 1</specular>
-        </material>
-      </visual>
-      <visual name="ash_flake">
-        <pose>0.064 0.006 0.014 0.2 0.4 0.3</pose>
-        <geometry><box><size>0.025 0.012 0.006</size></box></geometry>
-        <material>
-          <ambient>0.22 0.22 0.22 1</ambient>
-          <diffuse>0.40 0.40 0.38 1</diffuse>
-        </material>
+      <visual name="poly_pizza_mesh">
+        <pose>0 0 0.005 0 1.5708 0</pose>
+        <geometry>
+          <mesh>
+            <uri>model://cigarette_butt/meshes/cigarette_butt_poly_by_google.glb</uri>
+            <scale>0.065 0.065 0.065</scale>
+          </mesh>
+        </geometry>
       </visual>
       <collision name="collision">
-        <pose>0 0 0.018 0 1.5708 0</pose>
-        <geometry><cylinder><radius>0.012</radius><length>0.11</length></cylinder></geometry>
+        <pose>0 0 0.005 0 1.5708 0</pose>
+        <geometry><cylinder><radius>0.005</radius><length>0.06</length></cylinder></geometry>
       </collision>
     </link>
   </model>

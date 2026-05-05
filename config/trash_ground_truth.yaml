@@ -7,22 +7,22 @@ objects:
     position: {x: 2.10, y: -2.25, z: 0.06}
   - id: demo_plastic_bottle_1
     class: plastic_bottle
-    position: {x: 2.90, y: -1.55, z: 0.16}
+    position: {x: 2.90, y: -1.55, z: 0.125}
   - id: demo_glass_bottle_1
     class: glass_bottle
-    position: {x: 3.55, y: -2.85, z: 0.17}
+    position: {x: 3.55, y: -2.85, z: 0.13}
   - id: demo_cardboard_box_1
     class: cardboard_box
-    position: {x: 4.30, y: -1.65, z: 0.14}
+    position: {x: 4.30, y: -1.65, z: 0.17}
   - id: demo_plastic_bag_1
     class: plastic_bag
-    position: {x: 4.95, y: -2.55, z: 0.03}
+    position: {x: 4.95, y: -2.55, z: 0.15}
   - id: demo_paper_packaging_1
     class: paper_packaging
     position: {x: 3.10, y: -3.35, z: 0.02}
   - id: demo_cigarette_butt_1
     class: cigarette_butt
-    position: {x: 1.75, y: -1.75, z: 0.01}
+    position: {x: 1.75, y: -1.75, z: 0.005}
   - id: demo_cigarette_butt_2
     class: cigarette_butt
-    position: {x: 2.35, y: -3.10, z: 0.01}
+    position: {x: 2.35, y: -3.10, z: 0.005}

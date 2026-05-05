@@ -3,54 +3,18 @@
   <model name="plastic_bottle">
     <static>true</static>
     <link name="link">
-      <visual name="blue_body">
-        <pose>0 0 0.16 0 0 0</pose>
-        <geometry><cylinder><radius>0.050</radius><length>0.26</length></cylinder></geometry>
-        <material>
-          <ambient>0.10 0.42 0.82 1</ambient>
-          <diffuse>0.18 0.65 1.00 1</diffuse>
-          <specular>0.75 0.75 0.75 1</specular>
-        </material>
-      </visual>
-      <visual name="crinkle_band_low">
-        <pose>0 0 0.075 0 0 0</pose>
-        <geometry><cylinder><radius>0.053</radius><length>0.018</length></cylinder></geometry>
-        <material>
-          <ambient>0.06 0.25 0.52 1</ambient>
-          <diffuse>0.10 0.40 0.75 1</diffuse>
-          <specular>0.5 0.5 0.5 1</specular>
-        </material>
-      </visual>
-      <visual name="white_label">
-        <pose>0 0 0.15 0 0 0</pose>
-        <geometry><cylinder><radius>0.053</radius><length>0.055</length></cylinder></geometry>
-        <material>
-          <ambient>0.86 0.90 0.94 1</ambient>
-          <diffuse>0.98 1.00 1.00 1</diffuse>
-          <specular>0.08 0.08 0.08 1</specular>
-        </material>
-      </visual>
-      <visual name="neck">
-        <pose>0 0 0.315 0 0 0</pose>
-        <geometry><cylinder><radius>0.024</radius><length>0.075</length></cylinder></geometry>
-        <material>
-          <ambient>0.11 0.50 0.92 1</ambient>
-          <diffuse>0.20 0.72 1.00 1</diffuse>
-          <specular>0.75 0.75 0.75 1</specular>
-        </material>
-      </visual>
-      <visual name="cap">
-        <pose>0 0 0.365 0 0 0</pose>
-        <geometry><cylinder><radius>0.028</radius><length>0.025</length></cylinder></geometry>
-        <material>
-          <ambient>0.02 0.10 0.80 1</ambient>
-          <diffuse>0.04 0.18 1.00 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-        </material>
+      <visual name="poly_pizza_mesh">
+        <pose>0 0 0 1.5708 0 0</pose>
+        <geometry>
+          <mesh>
+            <uri>model://plastic_bottle/meshes/water_bottle_quaternius.glb</uri>
+            <scale>0.16 0.16 0.16</scale>
+          </mesh>
+        </geometry>
       </visual>
       <collision name="collision">
-        <pose>0 0 0.18 0 0 0</pose>
-        <geometry><cylinder><radius>0.055</radius><length>0.36</length></cylinder></geometry>
+        <pose>0 0 0.125 0 0 0</pose>
+        <geometry><cylinder><radius>0.045</radius><length>0.25</length></cylinder></geometry>
       </collision>
     </link>
   </model>

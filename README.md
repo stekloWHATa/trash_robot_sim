@@ -2,194 +2,224 @@
 
 **Система локализации и идентификации бытового мусора в рабочей сцене мобильного робота**
 
-Дипломный проект. Симуляция мобильного робота в Gazebo Harmonic (ROS 2), который автономно
-объезжает заданную область, строит карту занятости и детектирует объекты бытового мусора
-по цветовым признакам с использованием RGBD-камеры.
+ROS 2/Gazebo Harmonic симуляция мобильного робота для демонстрации главного
+дипломного сценария: робот едет по подготовленной сцене, YOLOv8 распознает
+мусор на RGB-кадре, depth-камера дает расстояние, а найденные объекты
+появляются на карте/RViz как 3D-маркеры.
 
----
+Навигация с A*/boustrophedon оставлена в проекте как будущая доп. фича. Для
+актуального MVP основной запуск - `detection_demo.launch.py`: без автономного
+объезда препятствий, с коротким scripted motion для записи видео.
 
-## Архитектура системы
+## Архитектура
 
 ```
 Gazebo Harmonic
-    │
-    │  ros_gz_bridge
-    ▼
-/odom ──────────────────► astar_navigator ──► /cmd_vel ──► Gazebo
-/scan ──────────────────► map_builder
-/rgbd/image ────────────► map_builder
-/rgbd/depth_image ──────► map_builder
-/tf, /joint_states ─────► robot_state_publisher ──► /robot_description
-                              │
-                              ▼
-                         RViz 2
-                    /map, /trash_markers,
-                    /camera/image, /rgbd/image
+    |
+    | ros_gz_bridge
+    v
+/cmd_vel <------------- scripted_motion / teleop
+/odom -----------------> trash_detector
+/scan -----------------> map_builder ----------> /map
+/rgbd/image/image -----> trash_detector -------> /detections_img
+/rgbd/image/depth_image -> trash_detector -----> /trash_markers
+/rgbd/image/camera_info -> trash_detector -----> /trash_report + JSONL log
+/tf, /joint_states ----> robot_state_publisher -> RViz
 ```
 
-### Узлы ROS 2
+## Узлы
 
-| Узел | Исполняемый файл | Назначение |
+| Узел | Файл | Назначение |
 |---|---|---|
-| `astar_navigator` | `scripts/navigator.py` | A\*-планировщик + boustrophedon-покрытие |
-| `map_builder` | `scripts/map_builder.py` | Log-odds карта занятости + детекция мусора |
-| `robot_state_publisher` | системный | Публикует `/robot_description` и TF из URDF |
-| `gz_bridge` | `ros_gz_bridge` | Мост Gazebo ↔ ROS 2 |
+| `scripted_motion` | `scripts/scripted_motion.py` | Простой повторяемый маршрут для видеодемо |
+| `astar_navigator` | `scripts/navigator.py` | Future work: A*, покрытие области, pure pursuit |
+| `map_builder` | `scripts/map_builder.py` | OccupancyGrid по лидару через log-odds |
+| `trash_detector` | `scripts/detector.py` | YOLOv8-детекция, RGBD/ground-plane локализация, маркеры и отчёт |
+| `robot_state_publisher` | системный | `/robot_description` и TF |
+| `gz_bridge` | системный | Мост Gazebo <-> ROS 2 |
 
-### Топики
+## Основные топики
 
 | Топик | Тип | Описание |
 |---|---|---|
-| `/cmd_vel` | `geometry_msgs/Twist` | Команды скорости → робот |
+| `/cmd_vel` | `geometry_msgs/Twist` | Команды скорости робота |
 | `/odom` | `nav_msgs/Odometry` | Одометрия из Gazebo |
-| `/scan` | `sensor_msgs/LaserScan` | Данные лидара |
-| `/camera/image` | `sensor_msgs/Image` | Навигационная камера (FOV 60°) |
-| `/rgbd/image` | `sensor_msgs/Image` | RGBD-камера, цвет (FOV 86°) |
-| `/rgbd/depth_image` | `sensor_msgs/Image` | RGBD-камера, глубина (32FC1, метры) |
-| `/map` | `nav_msgs/OccupancyGrid` | Карта занятости (10 Гц) |
-| `/trash_markers` | `visualization_msgs/MarkerArray` | Маркеры найденного мусора в RViz |
-| `/trash_report` | `std_msgs/String` | Текстовый отчёт (каждые 5 с) |
-| `/scan_area` | `geometry_msgs/Polygon` | Область сканирования (оператор → навигатор) |
-| `/goal_pose` | `geometry_msgs/PoseStamped` | Разовая цель навигации (клик в RViz) |
+| `/scan` | `sensor_msgs/LaserScan` | Лидар |
+| `/map` | `nav_msgs/OccupancyGrid` | Карта занятости |
+| `/rgbd/image/image` | `sensor_msgs/Image` | RGB-кадр для YOLOv8 |
+| `/rgbd/image/depth_image` | `sensor_msgs/Image` | Depth-карта для 3D-локализации |
+| `/detections_img` | `sensor_msgs/Image` | Кадр с bbox |
+| `/trash_markers` | `visualization_msgs/MarkerArray` | Найденные объекты в RViz |
+| `/trash_report` | `std_msgs/String` | Текстовый отчёт |
+| `/scan_area` | `geometry_msgs/Polygon` | Область покрытия |
+| `/goal_pose` | `geometry_msgs/PoseStamped` | Разовая цель из RViz |
 
----
+## Быстрый запуск
 
-## Зависимости
-
-```bash
-# ROS 2 Jazzy / Humble
-sudo apt install \
-  ros-$ROS_DISTRO-ros-gz \
-  ros-$ROS_DISTRO-robot-state-publisher \
-  ros-$ROS_DISTRO-joint-state-publisher \
-  ros-$ROS_DISTRO-xacro \
-  ros-$ROS_DISTRO-rviz2 \
-  python3-numpy
-```
-
----
-
-## Сборка
+Главный сценарий для видео:
 
 ```bash
 cd ~/ros2_ws
 colcon build --packages-select trash_robot_sim
 source install/setup.bash
+ros2 launch trash_robot_sim detection_demo.launch.py scripted_motion:=true
 ```
 
----
-
-## Запуск
-
-### Терминал 1 — симуляция + навигация
-
-```bash
-source ~/ros2_ws/install/setup.bash
-ros2 launch trash_robot_sim gazebo.launch.py
-```
-
-Запускает:
-- Gazebo Harmonic с миром `trash_world.sdf`
-- Робота в позиции (-0.5, -2.0)
-- Узлы `astar_navigator`, `map_builder`, `robot_state_publisher`
-- Мост Gazebo ↔ ROS 2
-
-### Терминал 2 — визуализация
+В другом терминале:
 
 ```bash
 source ~/ros2_ws/install/setup.bash
 ros2 launch trash_robot_sim rviz.launch.py
 ```
 
-Открывает RViz с настроенным конфигом:
-- **Map** — строящаяся карта занятости
-- **LaserScan** — точки лидара (оранжевые)
-- **TrashMarkers** — сферы с подписями найденного мусора
-- **RobotModel** — модель робота
-- **NavCamera / RGBDCamera** — изображения с камер
-- **OdomTrail** — след движения робота
+Что смотреть/записывать:
 
-### Терминал 3 — задать область сканирования
+- Gazebo: робот проезжает мимо подготовленного мусора в
+  `worlds/detection_demo_world.sdf`;
+- RViz: `/map`, `/trash_markers`, `/detections_img`;
+- лог детектора: `/tmp/trash_detections.jsonl`;
+- кропы новых объектов: `/tmp/trash_detected`.
 
-После запуска симуляции отправить полигон — навигатор построит зигзаг-маршрут и начнёт объезд:
+Статичный запуск без scripted motion:
 
 ```bash
-# Сканировать всю арену (-9..+9 по обеим осям)
-ros2 topic pub /scan_area geometry_msgs/msg/Polygon \
-  "{points: [{x: -9.0, y: -9.0, z: 0.0}, {x: 9.0, y: 9.0, z: 0.0}]}" --once
-
-# Сканировать правый верхний квадрант
-ros2 topic pub /scan_area geometry_msgs/msg/Polygon \
-  "{points: [{x: 0.0, y: 0.0, z: 0.0}, {x: 9.0, y: 9.0, z: 0.0}]}" --once
+ros2 launch trash_robot_sim detection_demo.launch.py scripted_motion:=false
 ```
 
-Либо кликнуть **"2D Goal Pose"** в RViz — робот поедет в указанную точку.
+После записи прогона можно посчитать честный отчет по ground truth сцены:
 
----
+```bash
+python3 scripts/evaluate_detection_run.py \
+  --ground-truth config/trash_ground_truth.yaml \
+  --detections /tmp/trash_detections.jsonl
+```
+
+Старый полный запуск с навигатором остается доступен:
+
+```bash
+ros2 launch trash_robot_sim gazebo.launch.py
+```
+
+## YOLOv8-датасет
+
+Целевая таксономия лежит в `config/trash_classes.yaml`:
+
+- `cigarette_butt`
+- `plastic_bottle`
+- `glass_bottle`
+- `aluminum_can`
+- `plastic_bag`
+- `cardboard_box`
+- `paper_packaging`
+- `other_trash`
+
+Подготовить новый merged-набор без запуска долгого обучения:
+
+```bash
+python3 scripts/train_yolo.py --skip-download --prepare-only
+```
+
+По умолчанию результат пишется в `data/merged_v2`, чтобы не трогать старый
+`data/merged`. Скрипт применяет mapping классов, пропускает ненужные классы и
+сохраняет `merge_report.yaml`. Если входной YOLO-файл содержит segmentation
+polygon (`class x1 y1 x2 y2 ...`), он сворачивается в bbox для YOLO detect.
+
+Аудит YOLO-набора:
+
+```bash
+python3 scripts/audit_dataset.py data/merged_v2/data.yaml
+```
+
+Конвертация COCO/TACO-аннотаций в YOLO:
+
+```bash
+python3 scripts/train_yolo.py \
+  --coco-json /path/to/annotations.json \
+  --coco-images /path/to/images \
+  --coco-output data/taco_yolo \
+  --prepare-only
+```
+
+Затем добавить конвертированный набор в общий merge:
+
+```bash
+python3 scripts/train_yolo.py \
+  --skip-download \
+  --extra-dataset data/taco_yolo \
+  --prepare-only
+```
+
+Долгое обучение запускать только после аудита:
+
+```bash
+python3 scripts/train_yolo.py --skip-download --extra-dataset data/taco_yolo --epochs 100
+```
 
 ## Параметры
 
-Все параметры вынесены в `config/params.yaml` и загружаются автоматически при запуске.
+Все параметры находятся в `config/params.yaml`.
 
-| Параметр | По умолч. | Описание |
-|---|---|---|
-| `row_spacing` | 2.5 м | Шаг между строками зигзага |
-| `area_margin` | 0.8 м | Отступ от краёв области |
-| `max_linear_velocity` | 0.65 м/с | Макс. линейная скорость |
-| `max_angular_velocity` | 0.9 рад/с | Макс. угловая скорость |
-| `goal_radius` | 0.90 м | Радиус достижения цели |
-| `goal_timeout` | 120 с | Таймаут на одну точку пути |
-| `detect_threshold` | 0.08 | Мин. доля пикселей для детекции |
-| `merge_distance` | 2.5 м | Радиус объединения обнаружений |
+Ключевые параметры `trash_detector`:
 
----
+| Параметр | Значение | Описание |
+|---|---:|---|
+| `model_path` | `""` | Пусто = `share/models/yolov8n_trash.pt`; можно указать абсолютный путь к `best.pt` |
+| `conf_thresh` | `0.35` | Порог уверенности YOLO |
+| `merge_dist` | `1.2` | Радиус слияния повторных 3D-детекций |
+| `detect_rate` | `4.0` | Частота инференса |
+| `camera_mode` | `rgbd` | RGB и depth из одной RGBD-камеры |
+| `log_path` | `/tmp/trash_detections.jsonl` | JSONL-журнал bbox/depth/world/latency |
+| `save_crops` | `true` | Сохранять кадр и crop новых объектов |
+| `min_depth`/`max_depth` | `0.10`/`10.0` | Фильтр валидной depth-карты |
+| `class_conf_overrides` | `""` | Порог по классам, например `cigarette_butt:0.2` |
 
-## Классы мусора
+`camera_mode=nav_ground_plane` использует `/camera/image` и локализует объект
+пересечением луча камеры с плоскостью пола. Основной режим для дипломной
+демонстрации - `rgbd`.
 
-| Класс | Цвет маркера | Описание |
-|---|---|---|
-| `plastic_bottle_green` | зелёный | Пластиковая бутылка (зелёная) |
-| `plastic_bottle_blue` | синий | Пластиковая бутылка (синяя) |
-| `can_red` | красный | Металлическая банка (красная) |
-| `can_silver` | серый | Металлическая банка (серебро) |
-| `cardboard_box` | коричневый | Картонная коробка |
-| `plastic_bag` | светло-серый | Полиэтиленовый пакет |
-| `paper` | бежевый | Бумага / газета |
-| `bottle_glass` | тёмно-зелёный | Стеклянная бутылка |
+## Тесты
 
----
+Быстрые unit-тесты без запуска Gazebo:
 
-## Сцена (trash_world.sdf)
+```bash
+python3 -m pytest tests -q
+```
 
-- Арена **26 × 26 м** (от -13 до +13 по X и Y)
-- **5 барьеров** внутри арены
-- **25 объектов мусора**, рассредоточенных по арене: реалистичные 3D-модели
-  (бутылки с горлышком и крышкой, банки на боку, картонные коробки, полиэтиленовые пакеты, стеклянные бутылки)
-- Робот стартует в позиции **(0, -2)** по одометрии
+Покрыто:
 
----
+- A* и boustrophedon-навигация;
+- безопасность маршрутов около препятствий;
+- merge pipeline для YOLO-датасетов;
+- COCO/TACO -> YOLO conversion;
+- аудит YOLO-разметки;
+- геометрия depth/ground-plane локализации детектора;
+- smoke-тест detection demo assets/launch;
+- matching ground truth ↔ detector log.
 
-## Структура пакета
+## Структура
 
 ```
 trash_robot_sim/
-├── CMakeLists.txt
-├── package.xml
 ├── config/
-│   └── params.yaml          # параметры узлов
+│   ├── params.yaml
+│   ├── trash_ground_truth.yaml
+│   └── trash_classes.yaml
+├── docs/
+│   ├── datasets.md
+│   ├── experiments.md
+│   └── diploma_status_and_plan.md
 ├── launch/
-│   ├── gazebo.launch.py     # запуск симуляции
-│   └── rviz.launch.py       # запуск RViz
 ├── models/
-│   └── robot/
-│       └── only_robot.sdf   # SDF-модель робота (активная)
 ├── rviz/
-│   └── robot.rviz           # конфигурация RViz
 ├── scripts/
-│   ├── navigator.py         # A* + покрывающая навигация
-│   └── map_builder.py       # карта занятости + детекция мусора
+│   ├── audit_dataset.py
+│   ├── detector.py
+│   ├── evaluate_detection_run.py
+│   ├── map_builder.py
+│   ├── navigator.py
+│   ├── scripted_motion.py
+│   └── train_yolo.py
+├── tests/
 ├── urdf/
-│   └── trash_robot.urdf.xacro  # URDF для robot_state_publisher
 └── worlds/
-    └── trash_world.sdf      # мир Gazebo
 ```

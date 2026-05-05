@@ -1,0 +1,111 @@
+canonical_classes:
+  - cigarette_butt
+  - plastic_bottle
+  - glass_bottle
+  - aluminum_can
+  - plastic_bag
+  - cardboard_box
+  - paper_packaging
+  - other_trash
+
+aliases:
+  cigarette_butt:
+    - cigarette
+    - cigarette butt
+    - cigarette_butt
+    - cigarettebutt
+    - cigarettes-ends
+    - smoking-butt
+    - butt
+  plastic_bottle:
+    - plastic bottle
+    - plastic_bottle
+    - plasticbottle
+    - pet bottle
+    - pet_bottle
+    - clear plastic bottle
+    - other plastic bottle
+    - milk bottle
+  glass_bottle:
+    - glass bottle
+    - glass_bottle
+    - bottle glass
+    - glass jar
+  aluminum_can:
+    - aluminum can
+    - aluminium can
+    - drink can
+    - drinks can
+    - beer can
+    - food can
+    - can
+    - tin
+    - pull-tab can
+  plastic_bag:
+    - plastic bag
+    - plastic_bag
+    - garbage bag
+    - single-use carrier bag
+    - polypropylene bag
+    - zip plastic bag
+    - stretch film
+  cardboard_box:
+    - cardboard
+    - cardboard box
+    - carton box
+    - corrugated carton
+    - postal packaging
+    - pizza box
+    - other carton
+  paper_packaging:
+    - paper
+    - normal paper
+    - paper bag
+    - paper cup
+    - paper cups
+    - paperbox
+    - paper box
+    - drink carton
+    - tetra pack
+    - magazine paper
+    - wrapping paper
+  other_trash:
+    - disposable tableware
+    - disposable plastic cup
+    - plastic cup
+    - plastic can
+    - plastic canister
+    - plastic caps
+    - plastic lid
+    - plastic film
+    - crisp packet
+    - food waste
+    - broken glass
+    - plastic straw
+    - metal bottle cap
+    - aluminium foil
+    - aluminum caps
+    - foil
+    - scrap metal
+
+ignored_classes:
+  - biodegradable
+  - organic
+  - recyclable
+  - non-recyclable
+  - plastic
+  - metal
+  - glass
+  - combined plastic
+  - unknown plastic
+  - liquid
+  - cellulose
+  - ceramic
+  - electronics
+  - furniture
+  - textile
+  - wood
+  - printing industry
+  - metal shavings
+  - paper shavings
+  - plastic shavings

@@ -1,0 +1,119 @@
+<?xml version="1.0"?>
+<sdf version="1.10">
+  <world name="detection_demo_world">
+    <physics name="1ms" type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>1000</real_time_update_rate>
+    </physics>
+
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.95 0.93 0.88 1</diffuse>
+      <specular>0.25 0.25 0.25 1</specular>
+      <direction>-0.45 0.15 -0.88</direction>
+    </light>
+
+    <light type="point" name="softbox">
+      <pose>3 -3 5 0 0 0</pose>
+      <diffuse>0.45 0.48 0.55 1</diffuse>
+      <specular>0.1 0.1 0.1 1</specular>
+      <attenuation>
+        <range>20</range>
+        <constant>0.7</constant>
+        <linear>0.05</linear>
+        <quadratic>0.002</quadratic>
+      </attenuation>
+    </light>
+
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry><plane><normal>0 0 1</normal></plane></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><plane><normal>0 0 1</normal><size>16 12</size></plane></geometry>
+          <material>
+            <ambient>0.52 0.52 0.50 1</ambient>
+            <diffuse>0.66 0.66 0.62 1</diffuse>
+            <specular>0.05 0.05 0.05 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Low walls keep the video frame readable and give the lidar a map outline. -->
+    <model name="back_wall">
+      <static>true</static>
+      <pose>4.5 -5.0 0.6 0 0 0</pose>
+      <link name="link">
+        <collision name="col"><geometry><box><size>10 0.15 1.2</size></box></geometry></collision>
+        <visual name="vis"><geometry><box><size>10 0.15 1.2</size></box></geometry>
+          <material><ambient>0.62 0.60 0.56 1</ambient><diffuse>0.72 0.70 0.66 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="left_wall">
+      <static>true</static>
+      <pose>7.5 -1.0 0.6 0 0 0</pose>
+      <link name="link">
+        <collision name="col"><geometry><box><size>0.15 8 1.2</size></box></geometry></collision>
+        <visual name="vis"><geometry><box><size>0.15 8 1.2</size></box></geometry>
+          <material><ambient>0.62 0.60 0.56 1</ambient><diffuse>0.72 0.70 0.66 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Demo trash cluster: all poses mirrored in config/trash_ground_truth.yaml. -->
+    <include>
+      <uri>model://aluminum_can</uri>
+      <name>demo_aluminum_can_1</name>
+      <pose>2.10 -2.25 0 0 0 0.35</pose>
+    </include>
+    <include>
+      <uri>model://plastic_bottle</uri>
+      <name>demo_plastic_bottle_1</name>
+      <pose>2.90 -1.55 0 0 0 -0.35</pose>
+    </include>
+    <include>
+      <uri>model://glass_bottle</uri>
+      <name>demo_glass_bottle_1</name>
+      <pose>3.55 -2.85 0 0 0 0.10</pose>
+    </include>
+    <include>
+      <uri>model://cardboard_box</uri>
+      <name>demo_cardboard_box_1</name>
+      <pose>4.30 -1.65 0 0 0 0.55</pose>
+    </include>
+    <include>
+      <uri>model://plastic_bag</uri>
+      <name>demo_plastic_bag_1</name>
+      <pose>4.95 -2.55 0 0 0 -0.25</pose>
+    </include>
+    <include>
+      <uri>model://paper_packaging</uri>
+      <name>demo_paper_packaging_1</name>
+      <pose>3.10 -3.35 0 0 0 0.80</pose>
+    </include>
+    <include>
+      <uri>model://cigarette_butt</uri>
+      <name>demo_cigarette_butt_1</name>
+      <pose>1.75 -1.75 0 0 0 0.20</pose>
+    </include>
+    <include>
+      <uri>model://cigarette_butt</uri>
+      <name>demo_cigarette_butt_2</name>
+      <pose>2.35 -3.10 0 0 0 1.10</pose>
+    </include>
+  </world>
+</sdf>

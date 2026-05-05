@@ -21,6 +21,10 @@ install(PROGRAMS
   scripts/map_check.py
   scripts/detector.py
   scripts/train_yolo.py
+  scripts/audit_dataset.py
+  scripts/evaluate_detection_run.py
+  scripts/generate_textured_trash_assets.py
+  scripts/scripted_motion.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

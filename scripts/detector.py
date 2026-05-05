@@ -3,7 +3,7 @@
 detector.py — детекция и пространственная локализация бытового мусора через YOLOv8.
 
 Архитектура:
-  - YOLOv8n: нейросетевая детекция объектов на RGB-кадре RGBD-камеры
+  - YOLOv8n: нейросетевая детекция объектов на RGB-кадре камеры
   - Карта глубины: определение дистанции до центра детектированного bbox
   - Пинхол-камера + RT-матрица: перевод пикселей → мировые координаты
   - База объектов с кластеризацией: объединяет повторные детекции одного предмета
@@ -14,21 +14,25 @@ detector.py — детекция и пространственная локал�
   /detections_img  sensor_msgs/Image               (~4 Гц, bbox-визуализация)
 
 Подписывается на:
-  /rgbd/image         — RGB-кадр 640×480
-  /rgbd/depth_image   — карта глубины 640×480 (float32, метры)
-  /rgbd/camera_info   — матрица интринсик K
+  /rgbd/image/image          — RGB-кадр 640×480 (default camera_mode=rgbd)
+  /rgbd/image/depth_image    — карта глубины 640×480 (float32, метры)
+  /rgbd/image/camera_info    — матрица интринсик K
   /odom               — поза робота в мире
 
 Параметры (ROS):
-  model_path     — путь к файлу .pt (по умолчанию: share/models/yolov8n.pt)
+  model_path     — путь к файлу .pt (по умолчанию: share/models/yolov8n_trash.pt)
   conf_thresh    — порог уверенности YOLO (default 0.35)
   merge_dist     — радиус слияния детекций, м (default 1.2)
   detect_rate    — частота запуска инференса, Гц (default 4)
+  camera_mode    — rgbd или nav_ground_plane
+  log_path       — JSONL-журнал детекций для последующей оценки демо
 """
 
+import json
 import math
 import os
 import threading
+import time
 from datetime import datetime
 
 import cv2
@@ -51,7 +55,7 @@ except ImportError:
     _YOLO_OK = False
 
 
-# ── Геометрия RGBD-камеры на роботе ──────────────────────────────────────── #
+# ── Геометрия камер на роботе ─────────────────────────────────────────────── #
 #
 #  Тело робота (body link) — начало отсчёта позы из /odom.
 #  Цепочка трансформаций SDF:
@@ -70,14 +74,41 @@ except ImportError:
 #    ROS optical X  = SDF camera -Y  (правая сторона кадра)
 #    ROS optical Y  = SDF camera -Z  (вниз по кадру)
 
-# ── Используем NavCamera (/camera/image) для YOLO ──────────────────────── #
-#  pose relative_to='body': t=(0.6, 0, 0), R=Ry(+0.45 rad)
-#  Смотрит вперёд-чуть-вниз (~26°), тот же вид что показывает NavCamera в RViz.
-#  Тело робота (body) находится на высоте z=0.5м от пола → камера тоже на 0.5м.
-#  fov=1.0 рад, 640×480 → fx = fy = (320) / tan(0.5) ≈ 585.8
-CAM_TX    = 0.60   # м, смещение вперёд от body center
-CAM_TZ    = 0.0    # м, камера на той же высоте что центр тела (z_floor ≈ 0.5м)
-CAM_PITCH = 0.45   # рад, тангаж NavCamera (слегка вниз)
+#  RGBD camera:
+#    body -> desk_for_depth: t=(0.55, 0, 0.50)
+#    desk -> RGBD_camera:   t=(0.05, 0, 0.33), Ry(+1.10)
+#    итог: t=(0.60, 0, 0.83), horizontal_fov=1.5
+#
+#  NavCamera:
+#    body -> nav_camera: t=(0.60, 0, 0.00), Ry(+0.45), horizontal_fov=1.0
+#
+#  Важно: RGB и depth должны быть из одной камеры. Поэтому default режим — rgbd.
+BODY_Z = 0.50
+
+CAMERA_PROFILES = {
+    'rgbd': {
+        'tx': 0.60,
+        'tz': 0.83,
+        'pitch': 1.10,
+        'fov': 1.50,
+        'rgb_topic': '/rgbd/image/image',
+        'depth_topic': '/rgbd/image/depth_image',
+        'camera_info_topic': '/rgbd/image/camera_info',
+        'localization': 'depth',
+        'frame_id': 'RGBD_camera',
+    },
+    'nav_ground_plane': {
+        'tx': 0.60,
+        'tz': 0.00,
+        'pitch': 0.45,
+        'fov': 1.00,
+        'rgb_topic': '/camera/image',
+        'depth_topic': '',
+        'camera_info_topic': '',
+        'localization': 'ground_plane',
+        'frame_id': 'nav_camera',
+    },
+}
 
 # ── Отображение COCO классов → категории мусора ──────────────────────────── #
 #  Ключ — COCO class id (0-based), значение — человекочитаемое имя.
@@ -144,23 +175,56 @@ class Detector(Node):
 
         # ── Параметры ──────────────────────────────────────────────────── #
         pkg = get_package_share_directory('trash_robot_sim')
-        default_model = os.path.join(pkg, 'models', 'yolov8n.pt')
+        default_model = os.path.join(pkg, 'models', 'yolov8n_trash.pt')
 
         self.declare_parameter('model_path',  default_model)
         self.declare_parameter('conf_thresh', 0.35)
         self.declare_parameter('merge_dist',  1.2)
         self.declare_parameter('detect_rate', 4.0)
+        self.declare_parameter('camera_mode', 'rgbd')
+        self.declare_parameter('log_path', '/tmp/trash_detections.jsonl')
+        self.declare_parameter('save_crops', True)
+        self.declare_parameter('min_depth', 0.1)
+        self.declare_parameter('max_depth', 10.0)
+        self.declare_parameter('class_conf_overrides', '')
         self.declare_parameter('spawn_x',     0.0)
         self.declare_parameter('spawn_y',    -2.0)
+
+        self._camera_mode = str(self.get_parameter('camera_mode').value)
+        if self._camera_mode not in CAMERA_PROFILES:
+            self.get_logger().warn(
+                f'camera_mode={self._camera_mode!r} неизвестен, используем rgbd')
+            self._camera_mode = 'rgbd'
+        profile = CAMERA_PROFILES[self._camera_mode]
+
+        self.declare_parameter('rgb_topic', profile['rgb_topic'])
+        self.declare_parameter('depth_topic', profile['depth_topic'])
+        self.declare_parameter('camera_info_topic', profile['camera_info_topic'])
 
         self._conf  = self.get_parameter('conf_thresh').value
         self._merge = self.get_parameter('merge_dist').value
         self._rate  = self.get_parameter('detect_rate').value
         self._spawn_x = self.get_parameter('spawn_x').value
         self._spawn_y = self.get_parameter('spawn_y').value
+        self._log_path = str(self.get_parameter('log_path').value)
+        self._save_crops = bool(self.get_parameter('save_crops').value)
+        self._min_depth = float(self.get_parameter('min_depth').value)
+        self._max_depth = float(self.get_parameter('max_depth').value)
+        self._class_conf = self._parse_class_conf(
+            str(self.get_parameter('class_conf_overrides').value)
+        )
+        self._rgb_topic = str(self.get_parameter('rgb_topic').value)
+        self._depth_topic = str(self.get_parameter('depth_topic').value)
+        self._camera_info_topic = str(self.get_parameter('camera_info_topic').value)
+        self._cam_tx = float(profile['tx'])
+        self._cam_tz = float(profile['tz'])
+        self._cam_pitch = float(profile['pitch'])
+        self._cam_fov = float(profile['fov'])
+        self._localization = str(profile['localization'])
+        self._camera_frame_id = str(profile['frame_id'])
 
         # ── Загрузка YOLOv8 ────────────────────────────────────────────── #
-        model_path = self.get_parameter('model_path').value
+        model_path = str(self.get_parameter('model_path').value) or default_model
         self._model = None
         self._is_coco = True  # до загрузки — безопасный default
         if _YOLO_OK:
@@ -206,6 +270,16 @@ class Detector(Node):
         # id → {'x','y','category','label','conf','count'}
         self._trash: dict[int, dict] = {}
         self._trash_counter = 0
+        self._last_registered_id: int | None = None
+        self._frame_seq = 0
+
+        self._log_fp = None
+        if self._log_path:
+            log_dir = os.path.dirname(self._log_path)
+            if log_dir:
+                os.makedirs(log_dir, exist_ok=True)
+            self._log_fp = open(self._log_path, 'a', buffering=1)
+            self.get_logger().info(f'JSONL журнал детекций: {self._log_path}')
 
         # ── QoS ────────────────────────────────────────────────────────── #
         transient = QoSProfile(
@@ -223,13 +297,12 @@ class Detector(Node):
             Image, '/detections_img', 10)
 
         # ── Подписки ───────────────────────────────────────────────────── #
-        self.create_subscription(Odometry,   '/odom',                        self._odom_cb,    10)
-        self.create_subscription(CameraInfo, '/rgbd/image/camera_info',     self._caminfo_cb,  1)
-        # RGB для YOLO — NavCamera (/camera/image): forward-facing, fov=1.0, pitch=0.45
-        # Тот же вид что показывает RViz NavCamera панель.
-        self.create_subscription(Image,      '/camera/image',                self._rgb_cb,     10)
-        # Depth — RGBD камера (вспомогательно для 3D-локализации)
-        self.create_subscription(Image,      '/rgbd/image/depth_image',      self._depth_cb,   10)
+        self.create_subscription(Odometry, '/odom', self._odom_cb, 10)
+        if self._camera_info_topic:
+            self.create_subscription(CameraInfo, self._camera_info_topic, self._caminfo_cb, 1)
+        self.create_subscription(Image, self._rgb_topic, self._rgb_cb, 10)
+        if self._depth_topic:
+            self.create_subscription(Image, self._depth_topic, self._depth_cb, 10)
 
         # ── Таймеры ────────────────────────────────────────────────────── #
         detect_period = 1.0 / max(0.5, self._rate)
@@ -238,8 +311,27 @@ class Detector(Node):
 
         self.get_logger().info(
             f'Detector: conf={self._conf}, merge={self._merge}м, '
-            f'rate={self._rate}Гц'
+            f'rate={self._rate}Гц, camera_mode={self._camera_mode}, '
+            f'rgb={self._rgb_topic}, depth={self._depth_topic or "off"}'
         )
+
+    @staticmethod
+    def _parse_class_conf(raw: str) -> dict[str, float]:
+        """Парсит строку вида 'cigarette_butt:0.2,plastic_bottle:0.45'."""
+        overrides: dict[str, float] = {}
+        for item in raw.split(','):
+            item = item.strip()
+            if not item:
+                continue
+            if ':' not in item:
+                continue
+            name, value = item.split(':', 1)
+            name = name.strip().lower().replace(' ', '_').replace('-', '_')
+            try:
+                overrides[name] = float(value)
+            except ValueError:
+                continue
+        return overrides
 
     # ── Одометрия ────────────────────────────────────────────────────────── #
 
@@ -299,19 +391,17 @@ class Detector(Node):
         if self._model is None or not self._odom_ok:
             return
 
-        # Если camera_info так и не пришёл — считаем интринсики из параметров SDF
-        # NavCamera: horizontal_fov=1.0 рад, width=640, height=480
-        # fx = fy = (640/2) / tan(1.0/2) ≈ 585.8
+        # Если camera_info так и не пришёл — считаем интринсики из параметров SDF.
         if self._K is None:
-            fov, w, h = 1.0, 640.0, 480.0
+            fov, w, h = self._cam_fov, 640.0, 480.0
             fx = (w / 2.0) / math.tan(fov / 2.0)
             self._K = np.array(
                 [[fx, 0.0, w / 2.0],
                  [0.0, fx, h / 2.0],
                  [0.0, 0.0, 1.0]], dtype=np.float64)
             self.get_logger().warn(
-                f'camera_info не получен — используем NavCamera K: '
-                f'fx=fy={fx:.1f}, cx={w/2:.0f}, cy={h/2:.0f}'
+                f'camera_info не получен — используем {self._camera_mode} K: '
+                f'fov={fov:.2f}, fx=fy={fx:.1f}, cx={w/2:.0f}, cy={h/2:.0f}'
             )
 
         with self._img_lock:
@@ -321,13 +411,18 @@ class Detector(Node):
             # Depth необязателен: без него YOLO всё равно рисует bbox на кадре,
             # но пространственные маркеры на карте не выставляются.
             depth = self._latest_depth.copy() if self._latest_depth is not None else None
+            rgb_stamp = self._rgb_stamp
 
+        t0 = time.perf_counter()
         results = self._model(rgb, conf=self._conf, verbose=False)
+        inference_ms = (time.perf_counter() - t0) * 1000.0
         if not results:
             return
 
         det = results[0]
         annotated = det.plot()   # кадр с нарисованными bbox
+        self._frame_seq += 1
+        frame_seq = self._frame_seq
 
         found_new = False
         for box in det.boxes:
@@ -344,22 +439,47 @@ class Detector(Node):
                 # Fine-tuned TACO: все классы = мусор, категория = имя класса
                 category = label.lower().replace(' ', '_').replace('-', '_')
 
+            class_threshold = self._class_conf.get(
+                category,
+                self._class_conf.get(
+                    label.lower().replace(' ', '_').replace('-', '_'),
+                    self._conf,
+                )
+            )
+            if conf_val < class_threshold:
+                continue
+
             # Центр bbox в пикселях
             x1, y1, x2, y2 = box.xyxy[0].tolist()
             u = (x1 + x2) / 2.0
             v = (y1 + y2) / 2.0
 
-            # Глубина: медиана патча вокруг центра bbox (None если depth не пришёл)
-            d = self._sample_depth(depth, u, v) if depth is not None else None
+            d = None
+            wx, wy = None, None
+            if self._localization == 'depth':
+                d = self._sample_depth(depth, u, v) if depth is not None else None
+                if d is not None:
+                    wx, wy = self._pixel_to_world(u, v, d)
+            elif self._localization == 'ground_plane':
+                wx, wy = self._pixel_to_world_ground(u, v)
 
-            # Пространственная локализация: пиксель + глубина → мировые координаты.
-            # Если глубина недоступна — добавляем детекцию без 3D-маркера.
-            if d is not None:
-                wx, wy = self._pixel_to_world(u, v, d)
-                if wx is not None:
-                    if self._register(wx, wy, category, label, conf_val,
-                                      annotated, (u, v, x1, y1, x2, y2)):
-                        found_new = True
+            if wx is not None:
+                if self._register(wx, wy, category, label, conf_val,
+                                  annotated, (u, v, x1, y1, x2, y2)):
+                    found_new = True
+            object_id = self._last_registered_id if wx is not None else None
+            self._log_detection(
+                label=label,
+                category=category,
+                conf=conf_val,
+                bbox=(x1, y1, x2, y2),
+                depth=d,
+                world=(wx, wy) if wx is not None else None,
+                object_id=object_id,
+                inference_ms=inference_ms,
+                frame_seq=frame_seq,
+                frame_stamp=rgb_stamp,
+            )
 
         if found_new:
             self._publish_markers()
@@ -376,7 +496,11 @@ class Detector(Node):
         x0, x1 = max(0, cu - patch), min(w, cu + patch + 1)
         y0, y1 = max(0, cv - patch), min(h, cv + patch + 1)
         roi = depth[y0:y1, x0:x1]
-        valid = roi[np.isfinite(roi) & (roi > 0.1) & (roi < 10.0)]
+        valid = roi[
+            np.isfinite(roi)
+            & (roi >= self._min_depth)
+            & (roi <= self._max_depth)
+        ]
         if len(valid) < 3:
             return None
         return float(np.median(valid))
@@ -397,7 +521,7 @@ class Detector(Node):
                Y_sdf = -X_opt    (вправо opt  = влево SDF)
                Z_sdf = -Y_opt    (вниз opt    = вверх SDF)
 
-          3. SDF camera → body: t=(0.60, 0, 0.83), Ry(CAM_PITCH)
+          3. SDF camera → body: t=(cam_tx, 0, cam_tz), Ry(cam_pitch)
                Ry(p)*[x,y,z] = [cos(p)*x+sin(p)*z, y, -sin(p)*x+cos(p)*z]
 
           4. Body → world: t=(rx, ry, 0.5), Rz(yaw)
@@ -418,20 +542,61 @@ class Detector(Node):
         Y_sdf = -X_opt
         Z_sdf = -Y_opt
 
-        # Шаг 3: body frame
-        p = CAM_PITCH
-        cp, sp = math.cos(p), math.sin(p)
-        X_body = cp * X_sdf + sp * Z_sdf + CAM_TX
-        Y_body = Y_sdf
-        Z_body = -sp * X_sdf + cp * Z_sdf + CAM_TZ
+        X_body, Y_body, _z_body = self._camera_point_to_body(X_sdf, Y_sdf, Z_sdf)
 
         # Шаг 4: world frame
+        return self._body_to_world(X_body, Y_body)
+
+    def _pixel_to_world_ground(self, u: float, v: float) -> tuple[float | None, float | None]:
+        """Пиксель → пересечение луча камеры с плоскостью пола."""
+        if self._K is None:
+            return None, None
+
+        fx = self._K[0, 0]; fy = self._K[1, 1]
+        cx = self._K[0, 2]; cy = self._K[1, 2]
+
+        x_opt = (u - cx) / fx
+        y_opt = (v - cy) / fy
+        # Луч в SDF camera frame при Z_opt=1.
+        ray_x_sdf = 1.0
+        ray_y_sdf = -x_opt
+        ray_z_sdf = -y_opt
+
+        dir_x, dir_y, dir_z = self._camera_vector_to_body(
+            ray_x_sdf, ray_y_sdf, ray_z_sdf)
+        origin_x, origin_y, origin_z = self._cam_tx, 0.0, self._cam_tz
+        floor_z_body = -BODY_Z
+        if dir_z >= -1e-6:
+            return None, None
+
+        t = (floor_z_body - origin_z) / dir_z
+        if t <= 0.0:
+            return None, None
+
+        x_body = origin_x + t * dir_x
+        y_body = origin_y + t * dir_y
+        return self._body_to_world(x_body, y_body)
+
+    def _camera_vector_to_body(self, x_sdf: float, y_sdf: float,
+                               z_sdf: float) -> tuple[float, float, float]:
+        p = self._cam_pitch
+        cp, sp = math.cos(p), math.sin(p)
+        return (
+            cp * x_sdf + sp * z_sdf,
+            y_sdf,
+            -sp * x_sdf + cp * z_sdf,
+        )
+
+    def _camera_point_to_body(self, x_sdf: float, y_sdf: float,
+                              z_sdf: float) -> tuple[float, float, float]:
+        x, y, z = self._camera_vector_to_body(x_sdf, y_sdf, z_sdf)
+        return x + self._cam_tx, y, z + self._cam_tz
+
+    def _body_to_world(self, x_body: float, y_body: float) -> tuple[float, float]:
         yaw = self._robot_yaw
         cy_r, sy_r = math.cos(yaw), math.sin(yaw)
-        wx = self._robot_x + cy_r * X_body - sy_r * Y_body
-        wy = self._robot_y + sy_r * X_body + cy_r * Y_body
-        # wz = 0.5 + Z_body  # ≈ 0 для напольных объектов (контроль)
-
+        wx = self._robot_x + cy_r * x_body - sy_r * y_body
+        wy = self._robot_y + sy_r * x_body + cy_r * y_body
         return wx, wy
 
     # ── Регистрация объектов ──────────────────────────────────────────────── #
@@ -446,18 +611,21 @@ class Detector(Node):
         При добавлении нового объекта сохраняет кроп bbox на диск.
         """
         # Слияние: ищем ближайший уже известный объект
-        for obj in self._trash.values():
+        self._last_registered_id = None
+        for tid, obj in self._trash.items():
             if math.hypot(wx - obj['x'], wy - obj['y']) < self._merge:
                 obj['x'] = 0.8 * obj['x'] + 0.2 * wx
                 obj['y'] = 0.8 * obj['y'] + 0.2 * wy
                 obj['count'] += 1
                 if conf > obj['conf']:
                     obj['conf'] = conf
+                self._last_registered_id = tid
                 return False
 
         # Новый объект
         tid = self._trash_counter
         self._trash_counter += 1
+        self._last_registered_id = tid
         self._trash[tid] = {
             'x': wx, 'y': wy,
             'category': category,
@@ -471,7 +639,7 @@ class Detector(Node):
         )
 
         # Сохраняем снимок нового объекта
-        if frame_bgr is not None and bbox is not None:
+        if self._save_crops and frame_bgr is not None and bbox is not None:
             self._save_detection(tid, label, conf, frame_bgr, bbox)
 
         return True
@@ -501,6 +669,53 @@ class Detector(Node):
                 self._save_dir, f'{ts}_id{tid:03d}_{safe_label}_crop.jpg')
             cv2.imwrite(crop_path, crop)
         self.get_logger().info(f'  → сохранено: {full_path}')
+
+    @staticmethod
+    def _stamp_to_float(stamp) -> float | None:
+        if stamp is None:
+            return None
+        sec = getattr(stamp, 'sec', None)
+        nanosec = getattr(stamp, 'nanosec', None)
+        if sec is None or nanosec is None:
+            return None
+        return float(sec) + float(nanosec) * 1e-9
+
+    def _log_detection(self, label: str, category: str, conf: float,
+                       bbox: tuple[float, float, float, float],
+                       depth: float | None,
+                       world: tuple[float, float] | None,
+                       object_id: int | None,
+                       inference_ms: float,
+                       frame_seq: int,
+                       frame_stamp) -> None:
+        """Пишет одну строку JSONL на bbox для воспроизводимой оценки демо."""
+        if self._log_fp is None:
+            return
+        x1, y1, x2, y2 = bbox
+        record = {
+            'timestamp_wall': time.time(),
+            'timestamp_ros': self._stamp_to_float(frame_stamp),
+            'frame_seq': int(frame_seq),
+            'object_id': object_id,
+            'class': category,
+            'label': label,
+            'confidence': float(conf),
+            'bbox_xyxy': [float(x1), float(y1), float(x2), float(y2)],
+            'bbox_center': [float((x1 + x2) / 2.0), float((y1 + y2) / 2.0)],
+            'depth_m': None if depth is None else float(depth),
+            'world': None if world is None else {
+                'x': float(world[0]),
+                'y': float(world[1]),
+            },
+            'robot': {
+                'x': float(self._robot_x),
+                'y': float(self._robot_y),
+                'yaw': float(self._robot_yaw),
+            },
+            'camera_mode': self._camera_mode,
+            'inference_ms': float(inference_ms),
+        }
+        self._log_fp.write(json.dumps(record, ensure_ascii=False) + '\n')
 
     # ── Публикация маркеров ───────────────────────────────────────────────── #
 
@@ -558,7 +773,7 @@ class Detector(Node):
         """Публикует BGR numpy-кадр как sensor_msgs/Image."""
         msg = Image()
         msg.header.stamp    = self.get_clock().now().to_msg()
-        msg.header.frame_id = 'camera'
+        msg.header.frame_id = self._camera_frame_id
         msg.height   = bgr.shape[0]
         msg.width    = bgr.shape[1]
         msg.encoding = 'bgr8'
@@ -599,6 +814,8 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
+        if getattr(node, '_log_fp', None) is not None:
+            node._log_fp.close()
         node.destroy_node()
         rclpy.shutdown()
 

@@ -1,0 +1,7 @@
+newmtl textured_surface
+Ka 0.860 0.910 0.940
+Kd 0.860 0.910 0.940
+Ks 0.120 0.120 0.120
+Ns 28.0
+illum 2
+map_Kd ../textures/plastic_bag_texture.png

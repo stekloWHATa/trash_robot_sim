@@ -1,0 +1,7 @@
+newmtl textured_surface
+Ka 0.920 0.780 0.340
+Kd 0.920 0.780 0.340
+Ks 0.120 0.120 0.120
+Ns 28.0
+illum 2
+map_Kd ../textures/paper_packaging_texture.png

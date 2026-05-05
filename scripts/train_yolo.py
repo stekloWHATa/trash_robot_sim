@@ -1,38 +1,25 @@
 #!/usr/bin/env python3
 """
-train_yolo.py — дообучение YOLOv8n на TACO (Trash Annotations in Context).
+train_yolo.py — дообучение YOLOv8n на нескольких датасетах мусора.
 
-TACO — специализированный датасет мусора: ~1500 изображений, 60 классов мусора,
-сгруппированных в 28 суперкатегорий (bottle, can, carton, cigarette, etc.)
+Поддерживает слияние произвольного количества Roboflow-датасетов:
+  - Скачивает каждый датасет
+  - Приводит классы к целевой таксономии из config/trash_classes.yaml
+  - Перемаппирует ID меток (.txt) под единую нумерацию
+  - Объединяет train/valid/test сплиты
+  - Обучает YOLOv8n на объединённом датасете
 
 Использование:
-  # Установить зависимости (один раз):
   pip install ultralytics roboflow
 
-  # Запустить обучение:
-  python3 scripts/train_yolo.py
+  # Скачать и обучить (датасеты заданы в DATASETS ниже):
+  python3 scripts/train_yolo.py --epochs 50
 
-  # После завершения (~2-4 часа на GPU, ~12ч на CPU):
-  # Модель сохраняется в models/yolov8n_trash.pt
-  # Обновите detector.py параметр model_path или скопируйте как yolov8n.pt
-
-Датасет загружается с Roboflow (TACO в формате YOLO):
-  https://universe.roboflow.com/material-identification/taco-trash-annotations-in-context
-
-Маппинг TACO-классов → наши категории задаётся в TACO_CATEGORY_MAP ниже.
+  # Если датасеты уже скачаны:
+  python3 scripts/train_yolo.py --skip-download --prepare-only
 """
 
-import os
-import sys
-import shutil
-import argparse
-
-# ── Проверка зависимостей ─────────────────────────────────────────────────── #
-try:
-    from ultralytics import YOLO
-except ImportError:
-    print('[ERROR] ultralytics не установлен. Запустите: pip install ultralytics')
-    sys.exit(1)
+import os, sys, shutil, argparse, glob, json, re
 
 # ── Пути ─────────────────────────────────────────────────────────────────── #
 SCRIPT_DIR   = os.path.dirname(os.path.abspath(__file__))
@@ -40,230 +27,418 @@ PACKAGE_DIR  = os.path.dirname(SCRIPT_DIR)
 MODELS_DIR   = os.path.join(PACKAGE_DIR, 'models')
 BASE_MODEL   = os.path.join(MODELS_DIR, 'yolov8n.pt')
 OUTPUT_MODEL = os.path.join(MODELS_DIR, 'yolov8n_trash.pt')
-DATA_DIR     = os.path.join(PACKAGE_DIR, 'data', 'taco_yolo')
-DATA_YAML    = os.path.join(DATA_DIR, 'data.yaml')
+DATA_ROOT    = os.path.join(PACKAGE_DIR, 'data')
+MERGED_DIR   = os.path.join(DATA_ROOT, 'merged_v2')
+CLASS_CONFIG = os.path.join(PACKAGE_DIR, 'config', 'trash_classes.yaml')
 
 # ── Параметры обучения ────────────────────────────────────────────────────── #
-EPOCHS      = 50       # 50 хватает для fine-tune; 100 дадут чуть лучше
-IMGSZ       = 640
-BATCH       = 8        # уменьшить до 4 если OOM на GPU
-PATIENCE    = 10       # early stopping
-DEVICE      = '0'      # GPU (NVIDIA). Если ошибка — поменяй на 'cpu'
+EPOCHS   = 100
+IMGSZ    = 640
+BATCH    = 16
+PATIENCE = 10
+DEVICE   = '0'   # GPU. Поменяй на 'cpu' если нет NVIDIA
 
-# ── Маппинг TACO 28 суперкатегорий → наши категории ─────────────────────── #
-# TACO supers: Bottle, Can, Carton, Cup, Lid, Other plastic, Paper, Plastic bag,
-#              Rope/Strings, Scrap metal, Shoe, Styrofoam, Unlabeled litter,
-#              Cigarette, Paper bag, Straw, Plastic film, Pop tab,
-#              Broken glass, Food waste, Glass jar, Battery, Blister pack,
-#              Foam sponge, Plastic container, Squeezable tube, Wrapping foil, Rubber glove
-TACO_CATEGORY_MAP = {
-    # Точные имена классов из TACO v15 на Roboflow (59 классов)
-    'Aerosol':                    'misc_object',
-    'Aluminium blister pack':     'hygiene',
-    'Aluminium foil':             'misc_object',
-    'Battery':                    'electronics',
-    'Broken glass':               'glass_bottle',
-    'Carded blister pack':        'hygiene',
-    'Cigarette':                  'cigarette',
-    'Clear plastic bottle':       'plastic_bottle',
-    'Corrugated carton':          'cardboard_paper',
-    'Crisp packet':               'misc_object',
-    'Disposable food container':  'misc_object',
-    'Disposable plastic cup':     'can_cup',
-    'Drink can':                  'can_cup',
-    'Drink carton':               'cardboard_paper',
-    'Egg carton':                 'cardboard_paper',
-    'Foam cup':                   'can_cup',
-    'Foam food container':        'misc_object',
-    'Food Can':                   'can_cup',
-    'Food waste':                 'organic_waste',
-    'Garbage bag':                'misc_object',
-    'Glass bottle':               'glass_bottle',
-    'Glass cup':                  'can_cup',
-    'Glass jar':                  'glass_bottle',
-    'Magazine paper':             'cardboard_paper',
-    'Meal carton':                'cardboard_paper',
-    'Metal bottle cap':           'misc_object',
-    'Metal lid':                  'misc_object',
-    'Normal paper':               'cardboard_paper',
-    'Other carton':               'cardboard_paper',
-    'Other plastic bottle':       'plastic_bottle',
-    'Other plastic container':    'plastic_bottle',
-    'Other plastic cup':          'can_cup',
-    'Other plastic wrapper':      'misc_object',
-    'Other plastic':              'misc_object',
-    'Paper bag':                  'cardboard_paper',
-    'Paper cup':                  'can_cup',
-    'Paper straw':                'misc_object',
-    'Pizza box':                  'cardboard_paper',
-    'Plastic bottle cap':         'misc_object',
-    'Plastic film':               'misc_object',
-    'Plastic glooves':            'hygiene',
-    'Plastic lid':                'misc_object',
-    'Plastic straw':              'misc_object',
-    'Plastic utensils':           'misc_object',
-    'Polypropylene bag':          'misc_object',
-    'Pop tab':                    'can_cup',
-    'Rope - strings':             'misc_object',
-    'Scrap metal':                'misc_object',
-    'Shoe':                       'misc_object',
-    'Single-use carrier bag':     'misc_object',
-    'Six pack rings':             'misc_object',
-    'Spread tub':                 'misc_object',
-    'Squeezable tube':            'hygiene',
-    'Styrofoam piece':            'misc_object',
-    'Tissues':                    'hygiene',
-    'Toilet tube':                'cardboard_paper',
-    'Tupperware':                 'plastic_bottle',
-    'Unlabeled litter':           'misc_object',
-    'Wrapping paper':             'misc_object',
-}
-
-OUR_CLASSES = sorted(set(TACO_CATEGORY_MAP.values()))
+# ── Датасеты для слияния ──────────────────────────────────────────────────── #
+# Формат: (workspace, project, version, local_folder_name)
+DATASETS = [
+    ('material-identification',    'garbage-classification-3',  2, 'garbage_class3'),
+    ('garbage-segregation-bagn8',  'garbage-segregation-yyhof', 1, 'garbage_segregation'),
+]
 
 
-def download_taco_roboflow(api_key: str, dest: str):
-    """Скачивает TACO с Roboflow в формате YOLOv8."""
-    import time
-    import zipfile
+# ─────────────────────────────────────────────────────────────────────────── #
+
+def download_dataset(api_key, workspace, project, version, dest):
+    """Скачивает один датасет с Roboflow."""
+    import time, zipfile
     try:
         from roboflow import Roboflow
     except ImportError:
-        print('[ERROR] roboflow не установлен. Запустите: pip install roboflow')
-        sys.exit(1)
+        print('[ERROR] pip install roboflow'); sys.exit(1)
 
-    print('[INFO] Загрузка TACO с Roboflow...')
+    os.makedirs(dest, exist_ok=True)
     rf = Roboflow(api_key=api_key)
-    project = rf.workspace('material-identification').project(
-        'taco-trash-annotations-in-context')
-    version = project.version(15)
+    proj = rf.workspace(workspace).project(project)
+    ver  = proj.version(version)
 
-    # Триггерим генерацию экспорта
-    print('[INFO] Генерация экспорта YOLOv8 (асинхронно)...')
-    version.export('yolov8')
+    print(f'[INFO] Генерация экспорта {workspace}/{project} v{version}...')
+    ver.export('yolov8')
 
-    # Скачиваем с retry — экспорт генерируется 10-30 секунд
     zip_path = os.path.join(dest, 'roboflow.zip')
-    for attempt in range(1, 13):
-        # Удаляем битый файл если есть
+    for attempt in range(1, 10):
         if os.path.isfile(zip_path):
             os.remove(zip_path)
-        print(f'[INFO] Попытка скачивания {attempt}/12...')
+        print(f'  Скачивание, попытка {attempt}/9...')
         try:
-            dataset = version.download('yolov8', location=dest, overwrite=True)
-            # Проверяем что zip валидный
+            ver.download('yolov8', location=dest, overwrite=True)
             if os.path.isfile(zip_path):
-                try:
-                    with zipfile.ZipFile(zip_path):
-                        pass
-                except zipfile.BadZipFile:
-                    print(f'[WARN] Экспорт ещё не готов, ждём 15с...')
-                    time.sleep(15)
-                    continue
-            print(f'[INFO] Датасет сохранён: {dataset.location}')
-            return dataset.location
+                with zipfile.ZipFile(zip_path):
+                    pass
+            print(f'  [OK] {dest}')
+            return
         except Exception as e:
-            if 'BadZipFile' in str(type(e).__name__) or 'not a zip' in str(e).lower():
-                print(f'[WARN] Экспорт ещё не готов, ждём 15с...')
-                time.sleep(15)
+            if 'BadZipFile' in type(e).__name__ or 'not a zip' in str(e).lower():
+                print(f'  Экспорт ещё генерируется, ждём 20с...')
+                time.sleep(20)
             else:
-                print(f'[ERROR] {e}')
-                sys.exit(1)
+                print(f'  [ERROR] {e}'); sys.exit(1)
 
-    print('[ERROR] Экспорт так и не сгенерировался за 3 минуты.')
-    print('[INFO] Попробуйте скачать вручную:')
-    print('  1. Откройте https://universe.roboflow.com/material-identification/taco-trash-annotations-in-context/15')
-    print('  2. Export → YOLOv8 → download zip')
-    print(f'  3. Распакуйте в {dest}')
-    print(f'  4. Запустите: python3 train_yolo.py --skip-download')
+    print(f'[ERROR] Не удалось скачать {workspace}/{project}')
     sys.exit(1)
 
 
-def make_data_yaml(data_dir: str) -> str:
-    """Создаёт data.yaml для обучения с нашими классами."""
+def read_yaml(path):
+    import yaml
+    with open(path) as f:
+        return yaml.safe_load(f)
+
+
+def write_yaml(path, data):
+    import yaml
+    with open(path, 'w') as f:
+        yaml.dump(data, f, allow_unicode=True, default_flow_style=False)
+
+
+def _norm_name(name):
+    """Нормализация имени класса для устойчивого mapping."""
+    return re.sub(r'[^a-z0-9]+', '', str(name).lower())
+
+
+def _names_to_list(names):
+    if isinstance(names, dict):
+        return [names[i] for i in sorted(names, key=lambda x: int(x))]
+    return list(names or [])
+
+
+def load_class_config(path=CLASS_CONFIG):
+    """Читает целевую таксономию и строит alias -> canonical map."""
+    if not path:
+        return None
+    if not os.path.isfile(path):
+        print(f'[WARN] class config не найден: {path}; классы будут объединены как есть')
+        return None
+
+    cfg = read_yaml(path)
+    classes = cfg.get('canonical_classes', [])
+    if not classes:
+        raise ValueError(f'canonical_classes пустой в {path}')
+
+    class_set = set(classes)
+    aliases = {}
+    for cls in classes:
+        aliases[_norm_name(cls)] = cls
+    for cls, names in cfg.get('aliases', {}).items():
+        if cls not in class_set:
+            raise ValueError(f'aliases содержит неизвестный canonical class: {cls}')
+        for name in names or []:
+            aliases[_norm_name(name)] = cls
+
+    ignored = {_norm_name(n) for n in cfg.get('ignored_classes', [])}
+    return {
+        'path': path,
+        'classes': classes,
+        'aliases': aliases,
+        'ignored': ignored,
+    }
+
+
+def _map_class(name, class_config):
+    if class_config is None:
+        return str(name)
+    key = _norm_name(name)
+    if key in class_config['aliases']:
+        return class_config['aliases'][key]
+    return None
+
+
+def _remap_yolo_annotation(parts, new_id):
+    """Возвращает YOLO bbox строку; segmentation polygon сворачивает в bbox."""
+    if len(parts) == 5:
+        return f'{new_id} ' + ' '.join(parts[1:])
+    if len(parts) > 5 and (len(parts) - 1) % 2 == 0:
+        try:
+            coords = [float(v) for v in parts[1:]]
+        except ValueError:
+            return None
+        xs = coords[0::2]
+        ys = coords[1::2]
+        x0, x1 = max(0.0, min(xs)), min(1.0, max(xs))
+        y0, y1 = max(0.0, min(ys)), min(1.0, max(ys))
+        w, h = x1 - x0, y1 - y0
+        if w <= 0.0 or h <= 0.0:
+            return None
+        xc = x0 + w / 2.0
+        yc = y0 + h / 2.0
+        return f'{new_id} {xc:.6f} {yc:.6f} {w:.6f} {h:.6f}'
+    return None
+
+
+def fix_yaml_paths(data_dir):
+    """Фиксирует относительные пути в data.yaml от Roboflow."""
     yaml_path = os.path.join(data_dir, 'data.yaml')
-    class_names = OUR_CLASSES
-    content = f"""# TACO → trash_robot_sim classes
-path: {data_dir}
-train: train/images
-val:   valid/images
-test:  test/images
-
-nc: {len(class_names)}
-names: {class_names}
-"""
-    with open(yaml_path, 'w') as f:
-        f.write(content)
-    print(f'[INFO] data.yaml: {yaml_path}')
-    return yaml_path
+    if not os.path.isfile(yaml_path):
+        return None
+    cfg = read_yaml(yaml_path)
+    cfg['path']  = data_dir
+    cfg['train'] = 'train/images'
+    cfg['val']   = 'valid/images'
+    cfg['test']  = 'test/images'
+    write_yaml(yaml_path, cfg)
+    return cfg
 
 
-def remap_labels(data_dir: str, taco_class_file: str):
+def merge_datasets(dataset_dirs, output_dir=None, class_config=None):
     """
-    Перемаппирует TACO class IDs → наши class IDs в .txt файлах разметки.
-    TACO классы берём из classes.txt в корне датасета.
+    Объединяет несколько датасетов в один.
+    Возвращает путь к объединённому data.yaml.
     """
-    # Читаем оригинальные классы TACO
-    with open(taco_class_file) as f:
-        taco_classes = [l.strip() for l in f if l.strip()]
+    output_dir = output_dir or MERGED_DIR
 
-    # Строим маппинг: taco_id → наш id
-    our_class_idx = {c: i for i, c in enumerate(OUR_CLASSES)}
-    remap = {}
-    for i, tc in enumerate(taco_classes):
-        our_cat = TACO_CATEGORY_MAP.get(tc)
-        if our_cat and our_cat in our_class_idx:
-            remap[i] = our_class_idx[our_cat]
+    # ── 1. Собираем все уникальные классы ────────────────────────────────── #
+    all_classes = list(class_config['classes']) if class_config else []
+    seen = set()
+    ds_configs = []
+    stats = {
+        'output_dir': output_dir,
+        'source_datasets': [],
+        'classes': all_classes,
+        'images_by_split': {'train': 0, 'valid': 0, 'test': 0},
+        'boxes_total': 0,
+        'boxes_kept': 0,
+        'boxes_skipped': 0,
+        'invalid_labels': 0,
+        'skipped_by_class': {},
+        'boxes_by_class': {c: 0 for c in all_classes},
+    }
 
-    print(f'[INFO] Маппинг классов: {len(remap)}/{len(taco_classes)} TACO → наши')
-
-    # Переписываем .txt файлы
-    remapped = 0
-    skipped = 0
-    for split in ('train', 'valid', 'test'):
-        lbl_dir = os.path.join(data_dir, split, 'labels')
-        if not os.path.isdir(lbl_dir):
+    for d in dataset_dirs:
+        yaml_path = os.path.join(d, 'data.yaml')
+        if not os.path.isfile(yaml_path):
+            print(f'[WARN] data.yaml не найден: {d}')
             continue
-        for fname in os.listdir(lbl_dir):
-            if not fname.endswith('.txt'):
+        cfg = fix_yaml_paths(d)
+        names = _names_to_list(cfg.get('names', []))
+        ds_configs.append((d, names))
+        stats['source_datasets'].append({
+            'path': d,
+            'classes': names,
+            'count': len(names),
+        })
+        if class_config is None:
+            for n in names:
+                nl = _norm_name(n)
+                if nl not in seen:
+                    seen.add(nl)
+                    all_classes.append(n)
+        print(f'[INFO] {os.path.basename(d)}: {len(names)} классов — {names}')
+
+    if class_config is None:
+        stats['classes'] = all_classes
+        stats['boxes_by_class'] = {c: 0 for c in all_classes}
+
+    print(f'\n[INFO] Объединённых классов: {len(all_classes)}')
+    for i, c in enumerate(all_classes):
+        print(f'  {i:2d}: {c}')
+
+    # ── 2. Строим таблицу перемаппинга для каждого датасета ──────────────── #
+    unified_idx = {_norm_name(c): i for i, c in enumerate(all_classes)}
+
+    # ── 3. Копируем изображения и перемаппируем метки ────────────────────── #
+    shutil.rmtree(output_dir, ignore_errors=True)
+    for split in ('train', 'valid', 'test'):
+        os.makedirs(os.path.join(output_dir, split, 'images'), exist_ok=True)
+        os.makedirs(os.path.join(output_dir, split, 'labels'), exist_ok=True)
+
+    total_imgs = 0
+    for d, names in ds_configs:
+        ds_name = os.path.basename(d)
+        # Строим маппинг: старый ID → новый ID
+        remap = {}
+        for old_id, name in enumerate(names):
+            mapped = _map_class(name, class_config)
+            if mapped is None:
                 continue
-            path = os.path.join(lbl_dir, fname)
-            new_lines = []
-            with open(path) as f:
-                for line in f:
-                    parts = line.strip().split()
-                    if not parts:
-                        continue
-                    old_id = int(parts[0])
-                    if old_id in remap:
-                        new_lines.append(f'{remap[old_id]} ' + ' '.join(parts[1:]))
-                        remapped += 1
-                    else:
-                        skipped += 1
-            with open(path, 'w') as f:
-                f.write('\n'.join(new_lines) + ('\n' if new_lines else ''))
+            new_id = unified_idx.get(_norm_name(mapped))
+            if new_id is not None:
+                remap[old_id] = new_id
 
-    print(f'[INFO] Переразмечено: {remapped} боксов, пропущено: {skipped}')
+        for split in ('train', 'valid', 'test'):
+            img_dir = os.path.join(d, split, 'images')
+            lbl_dir = os.path.join(d, split, 'labels')
+            if not os.path.isdir(img_dir):
+                continue
+
+            imgs = glob.glob(os.path.join(img_dir, '*'))
+            for img_path in imgs:
+                fname = os.path.basename(img_path)
+                stem  = os.path.splitext(fname)[0]
+                # Уникальное имя: датасет + оригинальное имя
+                new_stem = f'{ds_name}__{stem}'
+                ext = os.path.splitext(fname)[1]
+
+                # Копируем изображение
+                dst_img = os.path.join(output_dir, split, 'images', new_stem + ext)
+                shutil.copy2(img_path, dst_img)
+
+                # Перемаппируем метку
+                src_lbl = os.path.join(lbl_dir, stem + '.txt')
+                dst_lbl = os.path.join(output_dir, split, 'labels', new_stem + '.txt')
+                new_lines = []
+                if os.path.isfile(src_lbl):
+                    with open(src_lbl) as f:
+                        for line in f:
+                            parts = line.strip().split()
+                            if not parts:
+                                continue
+                            try:
+                                old_id = int(parts[0])
+                            except ValueError:
+                                stats['invalid_labels'] += 1
+                                continue
+                            stats['boxes_total'] += 1
+                            if old_id in remap:
+                                new_id = remap[old_id]
+                                cls_name = all_classes[new_id]
+                                new_line = _remap_yolo_annotation(parts, new_id)
+                                if new_line is None:
+                                    stats['invalid_labels'] += 1
+                                    continue
+                                new_lines.append(new_line)
+                                stats['boxes_kept'] += 1
+                                stats['boxes_by_class'][cls_name] += 1
+                            else:
+                                old_name = names[old_id] if 0 <= old_id < len(names) else f'__invalid_{old_id}'
+                                stats['boxes_skipped'] += 1
+                                stats['skipped_by_class'][old_name] = (
+                                    stats['skipped_by_class'].get(old_name, 0) + 1
+                                )
+                with open(dst_lbl, 'w') as f:
+                    f.write('\n'.join(new_lines) + ('\n' if new_lines else ''))
+
+                total_imgs += 1
+                stats['images_by_split'][split] += 1
+
+    print(f'\n[INFO] Скопировано изображений: {total_imgs}')
+    print(f'[INFO] BBox: kept={stats["boxes_kept"]}, skipped={stats["boxes_skipped"]}')
+
+    # ── 4. Создаём data.yaml для объединённого датасета ───────────────────── #
+    merged_yaml = os.path.join(output_dir, 'data.yaml')
+    write_yaml(merged_yaml, {
+        'path':  output_dir,
+        'train': 'train/images',
+        'val':   'valid/images',
+        'test':  'test/images',
+        'nc':    len(all_classes),
+        'names': all_classes,
+    })
+    write_yaml(os.path.join(output_dir, 'merge_report.yaml'), stats)
+    print(f'[INFO] Объединённый датасет: {merged_yaml}')
+    return merged_yaml
 
 
-def train(data_yaml: str, output_path: str, epochs: int = EPOCHS, batch: int = BATCH):
-    """Запускает fine-tuning YOLOv8n на TACO."""
-    print(f'\n[INFO] Загрузка базовой модели: {BASE_MODEL}')
+def convert_coco_to_yolo(coco_json, images_dir, output_dir, split='train',
+                         class_config=None, copy_images=True):
+    """Конвертирует COCO/TACO annotations в YOLO-папку со split/images|labels."""
+    with open(coco_json) as f:
+        coco = json.load(f)
+
+    categories = {int(c['id']): c['name'] for c in coco.get('categories', [])}
+    if class_config:
+        classes = list(class_config['classes'])
+    else:
+        classes = []
+        seen = set()
+        for _, name in sorted(categories.items()):
+            key = _norm_name(name)
+            if key not in seen:
+                seen.add(key)
+                classes.append(name)
+    class_idx = {_norm_name(c): i for i, c in enumerate(classes)}
+
+    out_img_dir = os.path.join(output_dir, split, 'images')
+    out_lbl_dir = os.path.join(output_dir, split, 'labels')
+    os.makedirs(out_img_dir, exist_ok=True)
+    os.makedirs(out_lbl_dir, exist_ok=True)
+
+    images = {int(img['id']): img for img in coco.get('images', [])}
+    labels_by_img = {img_id: [] for img_id in images}
+    skipped = {}
+
+    for ann in coco.get('annotations', []):
+        if ann.get('iscrowd', 0):
+            continue
+        img = images.get(int(ann['image_id']))
+        if not img:
+            continue
+        cat_name = categories.get(int(ann['category_id']), '')
+        mapped = _map_class(cat_name, class_config)
+        if mapped is None:
+            skipped[cat_name] = skipped.get(cat_name, 0) + 1
+            continue
+        cls_id = class_idx[_norm_name(mapped)]
+        x, y, w, h = [float(v) for v in ann['bbox']]
+        iw, ih = float(img['width']), float(img['height'])
+        x0 = max(0.0, min(iw, x))
+        y0 = max(0.0, min(ih, y))
+        x1 = max(0.0, min(iw, x + w))
+        y1 = max(0.0, min(ih, y + h))
+        bw, bh = x1 - x0, y1 - y0
+        if bw <= 0.0 or bh <= 0.0:
+            continue
+        xc = (x0 + bw / 2.0) / iw
+        yc = (y0 + bh / 2.0) / ih
+        labels_by_img[int(ann['image_id'])].append(
+            f'{cls_id} {xc:.6f} {yc:.6f} {bw / iw:.6f} {bh / ih:.6f}'
+        )
+
+    for img_id, img in images.items():
+        src = os.path.join(images_dir, img['file_name'])
+        stem = os.path.splitext(os.path.basename(img['file_name']))[0]
+        ext = os.path.splitext(img['file_name'])[1] or '.jpg'
+        if copy_images and os.path.isfile(src):
+            shutil.copy2(src, os.path.join(out_img_dir, stem + ext))
+        with open(os.path.join(out_lbl_dir, stem + '.txt'), 'w') as f:
+            lines = labels_by_img.get(img_id, [])
+            f.write('\n'.join(lines) + ('\n' if lines else ''))
+
+    data_yaml = os.path.join(output_dir, 'data.yaml')
+    write_yaml(data_yaml, {
+        'path': output_dir,
+        'train': 'train/images',
+        'val': 'valid/images',
+        'test': 'test/images',
+        'nc': len(classes),
+        'names': classes,
+    })
+    write_yaml(os.path.join(output_dir, f'{split}_coco_convert_report.yaml'), {
+        'source': coco_json,
+        'images': len(images),
+        'skipped_by_class': skipped,
+        'classes': classes,
+    })
+    return data_yaml
+
+
+def train(data_yaml, output_path, epochs=EPOCHS, batch=BATCH):
+    print(f'\n[INFO] Модель: {BASE_MODEL}')
+    print(f'[INFO] epochs={epochs}, batch={batch}, device={DEVICE}')
+
+    try:
+        from ultralytics import YOLO
+    except ImportError:
+        print('[ERROR] pip install ultralytics')
+        sys.exit(1)
+
     model = YOLO(BASE_MODEL)
-
-    print(f'[INFO] Запуск обучения: epochs={epochs}, imgsz={IMGSZ}, batch={batch}')
-    print(f'[INFO] Устройство: {DEVICE}')
-    print('[INFO] Это займёт 2-4 часа на GPU или ~12ч на CPU...\n')
-
-    results = model.train(
+    model.train(
         data=data_yaml,
         epochs=epochs,
         imgsz=IMGSZ,
         batch=batch,
         patience=PATIENCE,
         device=DEVICE,
-        project=os.path.join(PACKAGE_DIR, 'data', 'runs'),
-        name='taco_finetune',
+        project=os.path.join(DATA_ROOT, 'runs'),
+        name='trash_finetune',
         exist_ok=True,
         pretrained=True,
         optimizer='AdamW',
@@ -276,103 +451,104 @@ def train(data_yaml: str, output_path: str, epochs: int = EPOCHS, batch: int = B
         degrees=15.0,
         translate=0.1,
         scale=0.5,
-        flipud=0.0,
         fliplr=0.5,
         mosaic=1.0,
         verbose=True,
     )
-
-    # Копируем лучший checkpoint в models/
-    best = os.path.join(
-        PACKAGE_DIR, 'data', 'runs', 'taco_finetune', 'weights', 'best.pt')
-    if os.path.isfile(best):
-        shutil.copy2(best, output_path)
-        print(f'\n[OK] Модель сохранена: {output_path}')
-        print(f'[INFO] Чтобы использовать её: скопируйте как models/yolov8n.pt')
-        print(f'       cp {output_path} {BASE_MODEL}')
+    best = os.path.join(DATA_ROOT, 'runs', 'trash_finetune', 'weights', 'best.pt')
+    src  = best if os.path.isfile(best) else best.replace('best.pt', 'last.pt')
+    if os.path.isfile(src):
+        shutil.copy2(src, output_path)
+        print(f'\n[OK] Модель: {output_path}')
+        print(f'     Скопируй как yolov8n.pt:')
+        print(f'     cp {output_path} {BASE_MODEL}')
     else:
-        print(f'[WARN] best.pt не найден, ищем last.pt...')
-        last = best.replace('best.pt', 'last.pt')
-        if os.path.isfile(last):
-            shutil.copy2(last, output_path)
-            print(f'[OK] Сохранён last.pt → {output_path}')
-
-    return results
+        print('[WARN] Весовой файл не найден')
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description='Fine-tune YOLOv8n на TACO dataset')
-    parser.add_argument(
-        '--api-key', default='',
-        help='Roboflow API key (получить на https://app.roboflow.com → Settings → API)')
-    parser.add_argument(
-        '--data-dir', default=DATA_DIR,
-        help=f'Папка с TACO датасетом (default: {DATA_DIR})')
-    parser.add_argument(
-        '--skip-download', action='store_true',
-        help='Пропустить загрузку (если датасет уже скачан в --data-dir)')
-    parser.add_argument(
-        '--epochs', type=int, default=EPOCHS)
-    parser.add_argument(
-        '--batch', type=int, default=BATCH)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--api-key',       default='')
+    parser.add_argument('--skip-download', action='store_true')
+    parser.add_argument('--prepare-only',  action='store_true')
+    parser.add_argument('--class-config',  default=CLASS_CONFIG)
+    parser.add_argument('--output-dir',    default=MERGED_DIR)
+    parser.add_argument('--extra-dataset', action='append', default=[])
+    parser.add_argument('--coco-json',     default='')
+    parser.add_argument('--coco-images',   default='')
+    parser.add_argument('--coco-output',   default='')
+    parser.add_argument('--coco-split',    default='train')
+    parser.add_argument('--epochs',        type=int, default=EPOCHS)
+    parser.add_argument('--batch',         type=int, default=BATCH)
     args = parser.parse_args()
 
-    os.makedirs(args.data_dir, exist_ok=True)
     os.makedirs(MODELS_DIR, exist_ok=True)
+    os.makedirs(DATA_ROOT,  exist_ok=True)
+    class_config = load_class_config(args.class_config)
 
-    # ── Шаг 1: Загрузка датасета ─────────────────────────────────────────── #
+    if args.coco_json:
+        if not args.coco_images or not args.coco_output:
+            print('[ERROR] Для COCO/TACO нужны --coco-images и --coco-output')
+            sys.exit(1)
+        convert_coco_to_yolo(
+            args.coco_json,
+            args.coco_images,
+            args.coco_output,
+            split=args.coco_split,
+            class_config=class_config,
+            copy_images=True,
+        )
+        if args.prepare_only:
+            return
+
+    dataset_dirs = []
+
+    # ── Скачивание ────────────────────────────────────────────────────────── #
     if not args.skip_download:
         if not args.api_key:
-            print(
-                '\n[INFO] Для загрузки TACO нужен Roboflow API key.\n'
-                '  1. Зарегистрируйтесь на https://app.roboflow.com\n'
-                '  2. Settings → API → скопируйте Private API Key\n'
-                '  3. Запустите: python3 scripts/train_yolo.py --api-key YOUR_KEY\n'
-                '\n'
-                'Или скачайте вручную:\n'
-                '  Откройте https://universe.roboflow.com/material-identification/'
-                'taco-trash-annotations-in-context\n'
-                '  Export → YOLOv8 → Download ZIP → распакуйте в:\n'
-                f'  {DATA_DIR}\n'
-                '\n'
-                'Затем запустите:\n'
-                f'  python3 scripts/train_yolo.py --skip-download\n'
-            )
+            print('\n[INFO] Нужен Roboflow API key (Settings → API → Private key)')
+            print('  python3 train_yolo.py --api-key YOUR_KEY\n')
+            print('Или скачай вручную и запусти --skip-download')
             sys.exit(0)
-        download_taco_roboflow(args.api_key, args.data_dir)
+        for workspace, project, version, folder in DATASETS:
+            dest = os.path.join(DATA_ROOT, folder)
+            print(f'\n[INFO] Датасет: {workspace}/{project} v{version} → {folder}')
+            download_dataset(args.api_key, workspace, project, version, dest)
+            dataset_dirs.append(dest)
+    else:
+        for _, _, _, folder in DATASETS:
+            dest = os.path.join(DATA_ROOT, folder)
+            if os.path.isdir(dest):
+                dataset_dirs.append(dest)
+                print(f'[INFO] Найден: {dest}')
+            else:
+                print(f'[WARN] Не найден: {dest}')
 
-    # ── Шаг 2: Проверка структуры ─────────────────────────────────────────── #
-    expected = [
-        os.path.join(args.data_dir, 'train', 'images'),
-        os.path.join(args.data_dir, 'valid', 'images'),
-    ]
-    for d in expected:
-        if not os.path.isdir(d):
-            print(f'[ERROR] Папка не найдена: {d}')
-            print(f'[INFO] Проверьте структуру датасета в {args.data_dir}')
-            sys.exit(1)
+    for extra in args.extra_dataset:
+        if os.path.isdir(extra):
+            dataset_dirs.append(extra)
+            print(f'[INFO] Доп. датасет: {extra}')
+        else:
+            print(f'[WARN] Доп. датасет не найден: {extra}')
 
-    # ── Шаг 3: Фиксируем path в data.yaml (Roboflow пишет relative пути) ─── #
-    import yaml
-    yaml_path = os.path.join(args.data_dir, 'data.yaml')
-    with open(yaml_path) as f:
-        cfg = yaml.safe_load(f)
-    cfg['path'] = args.data_dir
-    cfg['train'] = 'train/images'
-    cfg['val']   = 'valid/images'
-    cfg['test']  = 'test/images'
-    with open(yaml_path, 'w') as f:
-        yaml.dump(cfg, f, allow_unicode=True)
-    print(f'[INFO] data.yaml обновлён: {len(cfg["names"])} классов TACO')
+    if not dataset_dirs:
+        print('[ERROR] Нет датасетов для обучения')
+        sys.exit(1)
 
-    # ── Шаг 5: Обучение ──────────────────────────────────────────────────── #
-    train(yaml_path, OUTPUT_MODEL, epochs=args.epochs, batch=args.batch)
+    # ── Слияние ───────────────────────────────────────────────────────────── #
+    print(f'\n[INFO] Объединяем {len(dataset_dirs)} датасет(ов)...')
+    merged_yaml = merge_datasets(
+        dataset_dirs,
+        output_dir=args.output_dir,
+        class_config=class_config,
+    )
 
-    print('\n=== Готово ===')
-    print(f'Обученная модель: {OUTPUT_MODEL}')
-    print(f'Чтобы использовать: cp {OUTPUT_MODEL} {BASE_MODEL}')
-    print('Затем перезапустите симуляцию.')
+    if args.prepare_only:
+        print('[OK] Датасет подготовлен, обучение пропущено (--prepare-only)')
+        return
+
+    # ── Обучение ──────────────────────────────────────────────────────────── #
+    train(merged_yaml, OUTPUT_MODEL, epochs=args.epochs, batch=args.batch)
 
 
 if __name__ == '__main__':

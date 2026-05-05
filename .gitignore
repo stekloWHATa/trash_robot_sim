@@ -1,0 +1,24 @@
+# Python / test cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local Codex/session files
+.codex
+
+# Datasets, training runs and generated evaluation outputs.
+# These contain thousands of jpg/png files and should not be committed.
+data/
+
+# Image dumps / screenshots / generated crops
+*.jpg
+*.jpeg
+*.png
+*.JPG
+*.JPEG
+*.PNG
+
+# Keep small Gazebo demo textures that are referenced by SDF/OBJ assets.
+!models/trash/**/textures/*.png
+!models/trash/**/textures/*.PNG
+

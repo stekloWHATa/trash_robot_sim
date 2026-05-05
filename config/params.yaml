@@ -38,18 +38,9 @@ astar_navigator:
     spawn_y: -2.0
 
 
-# ── Построитель карты + детектор мусора (map_builder) ────────
+# ── Построитель карты (map_builder) ──────────────────────────
 map_builder:
   ros__parameters:
-
-    # Минимальная доля пикселей ROI совпавшего цвета для детекции объекта.
-    # Объект 0.35м на расстоянии 1.5м даёт ~2-5% пикселей в ROI.
-    # 0.005 = 0.5% — уверенная детекция при нормальном освещении без лишних false positives.
-    detect_threshold: 0.005
-
-    # Дистанция объединения: два обнаружения ближе этого расстояния
-    # считаются одним и тем же объектом, метры.
-    merge_distance: 2.5
 
     # Минимальная валидная дальность лидара, метры.
     # Корпус робота 1.2×0.8м: полудиагональ = 0.72м.
@@ -57,5 +48,48 @@ map_builder:
     lidar_min_valid: 0.85
 
     # Мировые координаты центра тела робота при спавне (для коррекции odom-смещения).
+    spawn_x: 0.0
+    spawn_y: -2.0
+
+
+# ── YOLOv8-детектор мусора (trash_detector) ──────────────────
+trash_detector:
+  ros__parameters:
+
+    # Пустая строка = detector.py возьмёт share/models/yolov8n_trash.pt.
+    # Можно указать абсолютный путь к свежему best.pt после обучения.
+    model_path: ""
+
+    # YOLO confidence threshold. Для финальной модели подбирать на valid/sim.
+    conf_thresh: 0.35
+
+    # Радиус объединения повторных 3D-детекций одного предмета, метры.
+    merge_dist: 1.2
+
+    # Частота инференса. Для yolov8n на CPU можно снизить до 1-2 Гц.
+    detect_rate: 4.0
+
+    # JSONL-лог для оценки demo run: bbox, confidence, depth, world x/y, latency.
+    log_path: "/tmp/trash_detections.jsonl"
+
+    # Сохранять полный кадр и crop новых объектов в /tmp/trash_detected.
+    save_crops: true
+
+    # Фильтр валидной глубины RGBD-камеры.
+    min_depth: 0.10
+    max_depth: 10.0
+
+    # Опционально: "cigarette_butt:0.2,plastic_bottle:0.45".
+    # Работает поверх глобального conf_thresh.
+    class_conf_overrides: ""
+
+    # rgbd: RGB и depth берутся из одной RGBD-камеры.
+    # nav_ground_plane: RGB с NavCamera, локализация через плоскость пола.
+    camera_mode: "rgbd"
+    rgb_topic: "/rgbd/image/image"
+    depth_topic: "/rgbd/image/depth_image"
+    camera_info_topic: "/rgbd/image/camera_info"
+
+    # Мировые координаты центра тела робота при спавне.
     spawn_x: 0.0
     spawn_y: -2.0

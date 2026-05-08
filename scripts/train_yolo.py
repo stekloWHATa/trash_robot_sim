@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-train_yolo.py — дообучение YOLOv8n на нескольких датасетах мусора.
+train_yolo.py — дообучение YOLOv8s на датасетах бытового мусора.
 
 Поддерживает слияние произвольного количества Roboflow-датасетов:
   - Скачивает каждый датасет
   - Объединяет классы в единый список (дедупликация по имени)
   - Перемаппирует ID меток (.txt) под единую нумерацию
   - Объединяет train/valid/test сплиты
-  - Обучает YOLOv8n на объединённом датасете
+  - Обучает YOLOv8s на объединённом датасете
 
 Использование:
   pip install ultralytics roboflow
@@ -17,6 +17,9 @@ train_yolo.py — дообучение YOLOv8n на нескольких дат�
 
   # Если датасеты уже скачаны:
   python3 scripts/train_yolo.py --skip-download --epochs 50
+
+  # Только собрать merged-набор из локальных датасетов:
+  python3 scripts/train_yolo.py --skip-download --extra-dataset data/taco_yolo --prepare-only
 """
 
 import os, sys, shutil, argparse, glob, json
@@ -30,17 +33,19 @@ except ImportError:
 SCRIPT_DIR   = os.path.dirname(os.path.abspath(__file__))
 PACKAGE_DIR  = os.path.dirname(SCRIPT_DIR)
 MODELS_DIR   = os.path.join(PACKAGE_DIR, 'models')
-BASE_MODEL   = os.path.join(MODELS_DIR, 'yolov8n.pt')
-OUTPUT_MODEL = os.path.join(MODELS_DIR, 'yolov8n_trash.pt')
+BASE_MODEL   = os.path.join(MODELS_DIR, 'yolov8s.pt')
+OUTPUT_MODEL = os.path.join(MODELS_DIR, 'yolov8s_trash.pt')
 DATA_ROOT    = os.path.join(PACKAGE_DIR, 'data')
 MERGED_DIR   = os.path.join(DATA_ROOT, 'merged_v2')
+DEFAULT_CLASS_CONFIG = os.path.join(PACKAGE_DIR, 'config', 'trash_classes_mvp.yaml')
 
 # ── Параметры обучения ────────────────────────────────────────────────────── #
-EPOCHS   = 100
-IMGSZ    = 640
+EPOCHS   = 120
+IMGSZ    = 960
 BATCH    = 16
-PATIENCE = 10
+PATIENCE = 25
 DEVICE   = '0'   # GPU. Поменяй на 'cpu' если нет NVIDIA
+RUN_NAME = 'trash_yolov8s_img960'
 
 # ── Датасеты для слияния ──────────────────────────────────────────────────── #
 # Формат: (workspace, project, version, local_folder_name)
@@ -311,6 +316,7 @@ def merge_datasets(dataset_dirs, class_config=None, output_dir=None):
 def convert_coco_to_yolo(coco_json, images_dir, output_dir, split='train', class_config=None):
     with open(coco_json, encoding='utf-8') as f:
         coco = json.load(f)
+    split = str(split or 'train').lower()
     classes = list(class_config['classes']) if class_config else [
         c['name'] for c in coco.get('categories', [])
     ]
@@ -342,19 +348,39 @@ def convert_coco_to_yolo(coco_json, images_dir, output_dir, split='train', class
             f'{class_to_idx[mapped]} {xc:.6f} {yc:.6f} {bw:.6f} {bh:.6f}'
         )
 
-    img_out = os.path.join(output_dir, split, 'images')
-    lbl_out = os.path.join(output_dir, split, 'labels')
-    os.makedirs(img_out, exist_ok=True)
-    os.makedirs(lbl_out, exist_ok=True)
-    for img_id, img in image_by_id.items():
+    shutil.rmtree(output_dir, ignore_errors=True)
+    for split_name in ('train', 'valid', 'test'):
+        os.makedirs(os.path.join(output_dir, split_name, 'images'), exist_ok=True)
+        os.makedirs(os.path.join(output_dir, split_name, 'labels'), exist_ok=True)
+
+    sorted_images = sorted(image_by_id.items(), key=lambda item: str(item[0]))
+    split_counts = {'train': 0, 'valid': 0, 'test': 0}
+    box_counts = {'train': 0, 'valid': 0, 'test': 0}
+
+    for idx, (img_id, img) in enumerate(sorted_images):
+        if split == 'auto':
+            frac = idx / max(1, len(sorted_images))
+            out_split = 'train' if frac < 0.80 else ('valid' if frac < 0.90 else 'test')
+        elif split in ('val', 'valid'):
+            out_split = 'valid'
+        elif split == 'test':
+            out_split = 'test'
+        else:
+            out_split = 'train'
+
+        img_out = os.path.join(output_dir, out_split, 'images')
+        lbl_out = os.path.join(output_dir, out_split, 'labels')
         src = os.path.join(images_dir, img['file_name'])
-        dst = os.path.join(img_out, os.path.basename(img['file_name']))
+        safe_name = img['file_name'].replace('\\', '/').replace('/', '__')
+        dst = os.path.join(img_out, safe_name)
         if os.path.isfile(src):
             shutil.copy2(src, dst)
-        stem = os.path.splitext(os.path.basename(img['file_name']))[0]
+        stem = os.path.splitext(safe_name)[0]
+        lines = labels_by_image.get(img_id, [])
         with open(os.path.join(lbl_out, stem + '.txt'), 'w') as f:
-            lines = labels_by_image.get(img_id, [])
             f.write('\n'.join(lines) + ('\n' if lines else ''))
+        split_counts[out_split] += 1
+        box_counts[out_split] += len(lines)
 
     data_yaml = os.path.join(output_dir, 'data.yaml')
     write_yaml(data_yaml, {
@@ -365,25 +391,47 @@ def convert_coco_to_yolo(coco_json, images_dir, output_dir, split='train', class
         'nc': len(classes),
         'names': classes,
     })
+    write_yaml(os.path.join(output_dir, f'{split}_coco_convert_report.yaml'), {
+        'source_json': coco_json,
+        'source_images': images_dir,
+        'split_mode': split,
+        'images': split_counts,
+        'boxes': box_counts,
+        'classes': classes,
+    })
     return data_yaml
 
 
-def train(data_yaml, output_path, epochs=EPOCHS, batch=BATCH):
+def _resolve_base_model(base_model: str) -> str:
+    if os.path.isfile(base_model):
+        return base_model
+    basename = os.path.basename(base_model)
+    if basename in {'yolov8n.pt', 'yolov8s.pt', 'yolov8m.pt'}:
+        print(f'[WARN] Локальная base model не найдена: {base_model}; '
+              f'передаю Ultralytics имя модели {basename!r}')
+        return basename
+    return base_model
+
+
+def train(data_yaml, output_path, epochs=EPOCHS, batch=BATCH,
+          base_model=BASE_MODEL, imgsz=IMGSZ, device=DEVICE,
+          run_name=RUN_NAME):
     if YOLO is None:
         print('[ERROR] pip install ultralytics')
         sys.exit(1)
-    print(f'\n[INFO] Модель: {BASE_MODEL}')
-    print(f'[INFO] epochs={epochs}, batch={batch}, device={DEVICE}')
-    model = YOLO(BASE_MODEL)
+    base_model = _resolve_base_model(base_model)
+    print(f'\n[INFO] Модель: {base_model}')
+    print(f'[INFO] epochs={epochs}, batch={batch}, imgsz={imgsz}, device={device}')
+    model = YOLO(base_model)
     model.train(
         data=data_yaml,
         epochs=epochs,
-        imgsz=IMGSZ,
+        imgsz=imgsz,
         batch=batch,
         patience=PATIENCE,
-        device=DEVICE,
+        device=device,
         project=os.path.join(DATA_ROOT, 'runs'),
-        name='trash_finetune',
+        name=run_name,
         exist_ok=True,
         pretrained=True,
         optimizer='AdamW',
@@ -400,13 +448,12 @@ def train(data_yaml, output_path, epochs=EPOCHS, batch=BATCH):
         mosaic=1.0,
         verbose=True,
     )
-    best = os.path.join(DATA_ROOT, 'runs', 'trash_finetune', 'weights', 'best.pt')
+    best = os.path.join(DATA_ROOT, 'runs', run_name, 'weights', 'best.pt')
     src  = best if os.path.isfile(best) else best.replace('best.pt', 'last.pt')
     if os.path.isfile(src):
         shutil.copy2(src, output_path)
         print(f'\n[OK] Модель: {output_path}')
-        print(f'     Скопируй как yolov8n.pt:')
-        print(f'     cp {output_path} {BASE_MODEL}')
+        print(f'     Для detector.py укажи model_path или оставь default yolov8s_trash.pt.')
     else:
         print('[WARN] Весовой файл не найден')
 
@@ -417,12 +464,54 @@ def main():
     parser.add_argument('--skip-download', action='store_true')
     parser.add_argument('--epochs',        type=int, default=EPOCHS)
     parser.add_argument('--batch',         type=int, default=BATCH)
+    parser.add_argument('--imgsz',         type=int, default=IMGSZ)
+    parser.add_argument('--device',        default=DEVICE)
+    parser.add_argument('--base-model',    default=BASE_MODEL)
+    parser.add_argument('--output-model',  default=OUTPUT_MODEL)
+    parser.add_argument('--run-name',      default=RUN_NAME)
+    parser.add_argument('--prepare-only',  action='store_true')
+    parser.add_argument('--extra-dataset', action='append', default=[],
+                        help='Локальный YOLOv8 dataset dir с data.yaml. Можно повторять.')
+    parser.add_argument('--only-extra-datasets', action='store_true',
+                        help='Не добавлять стандартные DATASETS, использовать только --extra-dataset/--coco-json.')
+    parser.add_argument('--output-dir',    default=MERGED_DIR,
+                        help='Куда писать объединенный YOLO dataset.')
+    parser.add_argument('--class-config', default=DEFAULT_CLASS_CONFIG)
+    parser.add_argument('--coco-json',     default='')
+    parser.add_argument('--coco-images',   default='')
+    parser.add_argument('--coco-output',   default=os.path.join(DATA_ROOT, 'taco_yolo'))
+    parser.add_argument('--coco-split',    default='auto')
     args = parser.parse_args()
 
     os.makedirs(MODELS_DIR, exist_ok=True)
     os.makedirs(DATA_ROOT,  exist_ok=True)
 
+    class_config = None
+    if args.class_config and os.path.isfile(args.class_config):
+        class_config = load_class_config(args.class_config)
+        print(f'[INFO] Class mapping: {args.class_config}')
+    elif args.class_config:
+        print(f'[WARN] Class config не найден: {args.class_config}')
+
     dataset_dirs = []
+
+    # ── Отдельная COCO/TACO-конвертация ──────────────────────────────────── #
+    if args.coco_json:
+        if not args.coco_images:
+            print('[ERROR] Для --coco-json нужен --coco-images')
+            sys.exit(1)
+        print(f'[INFO] COCO/TACO -> YOLO: {args.coco_json} → {args.coco_output}')
+        convert_coco_to_yolo(
+            args.coco_json,
+            args.coco_images,
+            args.coco_output,
+            split=args.coco_split,
+            class_config=class_config,
+        )
+        dataset_dirs.append(args.coco_output)
+        if args.prepare_only and args.skip_download and not args.extra_dataset:
+            print(f'[OK] Конвертация готова: {args.coco_output}')
+            return
 
     # ── Скачивание ────────────────────────────────────────────────────────── #
     if not args.skip_download:
@@ -437,13 +526,23 @@ def main():
             download_dataset(args.api_key, workspace, project, version, dest)
             dataset_dirs.append(dest)
     else:
-        for _, _, _, folder in DATASETS:
-            dest = os.path.join(DATA_ROOT, folder)
-            if os.path.isdir(dest):
-                dataset_dirs.append(dest)
-                print(f'[INFO] Найден: {dest}')
-            else:
-                print(f'[WARN] Не найден: {dest}')
+        if args.only_extra_datasets:
+            print('[INFO] Стандартные DATASETS пропущены: --only-extra-datasets')
+        else:
+            for _, _, _, folder in DATASETS:
+                dest = os.path.join(DATA_ROOT, folder)
+                if os.path.isdir(dest):
+                    dataset_dirs.append(dest)
+                    print(f'[INFO] Найден: {dest}')
+                else:
+                    print(f'[WARN] Не найден: {dest}')
+
+    for extra in args.extra_dataset:
+        if os.path.isdir(extra):
+            dataset_dirs.append(extra)
+            print(f'[INFO] Extra dataset: {extra}')
+        else:
+            print(f'[WARN] Extra dataset не найден: {extra}')
 
     if not dataset_dirs:
         print('[ERROR] Нет датасетов для обучения')
@@ -451,10 +550,27 @@ def main():
 
     # ── Слияние ───────────────────────────────────────────────────────────── #
     print(f'\n[INFO] Объединяем {len(dataset_dirs)} датасет(ов)...')
-    merged_yaml = merge_datasets(dataset_dirs)
+    merged_yaml = merge_datasets(
+        dataset_dirs,
+        class_config=class_config,
+        output_dir=args.output_dir,
+    )
+
+    if args.prepare_only:
+        print('[OK] prepare-only: обучение не запускалось')
+        return
 
     # ── Обучение ──────────────────────────────────────────────────────────── #
-    train(merged_yaml, OUTPUT_MODEL, epochs=args.epochs, batch=args.batch)
+    train(
+        merged_yaml,
+        args.output_model,
+        epochs=args.epochs,
+        batch=args.batch,
+        base_model=args.base_model,
+        imgsz=args.imgsz,
+        device=args.device,
+        run_name=args.run_name,
+    )
 
 
 if __name__ == '__main__':

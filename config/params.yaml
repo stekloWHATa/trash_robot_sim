@@ -56,7 +56,9 @@ map_builder:
 trash_detector:
   ros__parameters:
 
-    # Пустая строка = detector.py возьмёт share/models/yolov8n_trash.pt.
+    # Пустая строка = detector.py возьмёт share/models/yolov8s_trash.pt.
+    # Если yolov8s_trash.pt еще не обучена, detector.py временно попробует
+    # старую baseline-модель yolov8n_trash.pt.
     # Можно указать абсолютный путь к свежему best.pt после обучения.
     model_path: ""
 
@@ -66,7 +68,7 @@ trash_detector:
     # Радиус объединения повторных 3D-детекций одного предмета, метры.
     merge_dist: 1.2
 
-    # Частота инференса. Для yolov8n на CPU можно снизить до 1-2 Гц.
+    # Частота инференса. Для yolov8s на CPU можно снизить до 1-2 Гц.
     detect_rate: 4.0
 
     # JSONL-лог для оценки demo run: bbox, confidence, depth, world x/y, latency.

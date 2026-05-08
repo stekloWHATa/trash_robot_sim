@@ -47,14 +47,16 @@
 - `scripts/detector.py` загружает YOLOv8, публикует `/trash_markers`, `/trash_report`, `/detections_img`;
 - для COCO-модели есть фильтр `COCO_TRASH_MAP`;
 - для fine-tuned модели все классы считаются мусором;
-- есть регистрация объектов с объединением повторных детекций, сохранение full/crop кадров в `/tmp/trash_detected`;
+- есть регистрация объектов с объединением повторных детекций, сохранение full/crop кадров,
+  карточек с подписью класса/координат/статистики и JSON-метаданных в `/tmp/trash_detected`;
 - есть преобразование bbox center + depth + odometry в мировые координаты.
 
 YOLO и данные:
 - `scripts/train_yolo.py` уже объединяет несколько Roboflow-датасетов, чинит `data.yaml`, дедуплицирует классы, перемаппит label id, собирает `data/merged` и запускает обучение YOLOv8n;
 - локально есть `data/garbage_class3`, `data/garbage_segregation`, `data/merged`;
-- локально есть `models/yolov8n.pt` и `models/yolov8n_trash.pt`;
-- есть завершенный прогон `data/runs/trash_finetune`.
+- локально есть старая baseline-модель `models/yolov8n_trash.pt`;
+- основной следующий training target: `models/yolov8s_trash.pt` после обучения
+  `yolov8s`, `imgsz=960`.
 
 Текущий аудит `data/merged`:
 - train: 22299 images / 22299 labels;
@@ -191,8 +193,8 @@ YOLO и данные:
 
 1. Baseline 1: `yolov8n.pt` COCO без fine-tune в симуляции.
 2. Baseline 2: текущий `models/yolov8n_trash.pt`.
-3. Candidate A: `yolov8n` на `merged_v2`, 80-120 epochs.
-4. Candidate B: `yolov8s` на `merged_v2`, если есть GPU-время.
+3. Candidate A: `yolov8s` на `taco_only_detection_v1`, `imgsz=960`, 120 epochs.
+4. Candidate B: `yolov8s` на `merged_detection_v1` (`TACO + cigarette_butt + bottle/can/bag/cardboard`), `imgsz=960`, 120-160 epochs.
 5. Для каждого прогона сохранять:
    - `args.yaml`;
    - `results.csv`;
@@ -296,7 +298,9 @@ YOLO и данные:
 - есть `scripts/evaluate_detection_run.py`, который считает TP/FP/FN, F1, ошибку локализации и latency по JSONL-логу детектора;
 - целевые классы: `cigarette_butt`, `plastic_bottle`, `glass_bottle`, `aluminum_can`, `plastic_bag`, `cardboard_box`, `paper_packaging`, `other_trash`;
 - текущая старая модель `data/runs/trash_finetune`: precision 0.5255, recall 0.2916, mAP50 0.3337, mAP50-95 0.2335, качество недостаточно;
-- быстрые тесты проходят: `python3 -m pytest tests -q` -> 54 passed.
+- следующий основной training pipeline переведен на `yolov8s`, `imgsz=960`,
+  MVP-таксономию `config/trash_classes_mvp.yaml` и readiness-check перед долгим обучением;
+- быстрые тесты проходят: `python3 -m pytest tests -q`.
 
 Цель следующего этапа:
 - собрать демонстрационный стенд “детекция + локализация” без зависимости от автономного объезда;
@@ -332,7 +336,7 @@ YOLO и данные:
    - провести audit распределения классов;
    - сбалансировать классы, особенно окурки и мелкие объекты;
    - добавить augmentation под мелкий мусор: mosaic/copy-paste, random scale, blur/noise, brightness, perspective;
-   - рассмотреть `yolov8s` или `yolov8m`, если `yolov8n` не дотягивает;
+   - основной кандидат: `yolov8s`, `imgsz=960`; `yolov8n` оставить только baseline;
    - для мелких окурков рассмотреть tiling/SAHI inference или обучение с большим `imgsz`;
    - не запускать многочасовое обучение без явного решения, но подготовить команду, конфиг и expected outputs.
 6. Улучши `detector.py` именно под локализацию:

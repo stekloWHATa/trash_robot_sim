@@ -1,3 +1,4 @@
+import json
 import math
 import os
 import sys
@@ -33,6 +34,7 @@ def _make_detector_stub():
     node._max_depth = 10.0
     node._save_crops = False
     node._last_registered_id = None
+    node._camera_mode = 'rgbd'
     node._trash = {}
     node._trash_counter = 0
     node.get_logger = lambda: _Logger()
@@ -117,6 +119,102 @@ def test_parse_class_conf_ignores_bad_items():
         'cigarette_butt': 0.20,
         'plastic_bottle': 0.45,
     }
+
+
+def test_detection_stat_lines_include_coordinates_and_runtime():
+    node = _make_detector_stub()
+
+    lines = detector.Detector._detection_stat_lines(
+        node,
+        object_id=7,
+        label='Plastic bottle',
+        category='plastic_bottle',
+        conf=0.876,
+        bbox_xyxy=(10.0, 20.0, 90.0, 140.0),
+        depth=1.234,
+        world=(2.5, -1.25),
+        inference_ms=18.4,
+        frame_seq=42,
+    )
+    text = '\n'.join(lines)
+
+    assert 'object_id: 7' in text
+    assert 'class: plastic_bottle' in text
+    assert 'confidence: 0.876' in text
+    assert 'depth: 1.23 m' in text
+    assert 'world: x=2.50 y=-1.25 m' in text
+    assert 'inference: 18.4 ms' in text
+
+
+def test_detection_overlay_and_card_change_pixels():
+    node = _make_detector_stub()
+    frame = np.zeros((120, 180, 3), dtype=np.uint8)
+
+    detector.Detector._draw_detection_info(
+        node,
+        frame,
+        label='Can',
+        category='aluminum_can',
+        conf=0.75,
+        bbox_xyxy=(20.0, 30.0, 80.0, 100.0),
+        depth=0.9,
+        world=(1.0, 2.0),
+        object_id=3,
+        inference_ms=12.0,
+        frame_seq=5,
+    )
+
+    assert frame.sum() > 0
+
+    crop = np.full((50, 70, 3), 120, dtype=np.uint8)
+    lines = detector.Detector._detection_stat_lines(
+        node,
+        object_id=3,
+        label='Can',
+        category='aluminum_can',
+        conf=0.75,
+        bbox_xyxy=(20.0, 30.0, 80.0, 100.0),
+        depth=0.9,
+        world=(1.0, 2.0),
+        inference_ms=12.0,
+        frame_seq=5,
+    )
+    card = detector.Detector._make_detection_card(node, crop, lines)
+
+    assert card.shape[0] >= crop.shape[0]
+    assert card.shape[1] > crop.shape[1]
+
+
+def test_save_detection_writes_annotated_photos_and_metadata(tmp_path):
+    node = _make_detector_stub()
+    node._save_dir = str(tmp_path)
+    frame = np.full((120, 180, 3), 80, dtype=np.uint8)
+
+    detector.Detector._save_detection(
+        node,
+        tid=2,
+        label='Plastic bottle',
+        category='plastic_bottle',
+        conf=0.91,
+        frame_bgr=frame,
+        bbox=(50.0, 60.0, 20.0, 25.0, 100.0, 110.0),
+        depth=1.5,
+        world=(3.0, -2.0),
+        inference_ms=17.5,
+        frame_seq=11,
+    )
+
+    assert len(list(tmp_path.glob('*_full.jpg'))) == 1
+    assert len(list(tmp_path.glob('*_crop.jpg'))) == 1
+    assert len(list(tmp_path.glob('*_card.jpg'))) == 1
+    meta_files = list(tmp_path.glob('*_meta.json'))
+    assert len(meta_files) == 1
+
+    meta = json.loads(meta_files[0].read_text(encoding='utf-8'))
+    assert meta['object_id'] == 2
+    assert meta['class'] == 'plastic_bottle'
+    assert meta['world'] == {'x': 3.0, 'y': -2.0}
+    assert meta['depth_m'] == 1.5
 
 
 def pytest_approx(value):

@@ -43,8 +43,40 @@ ros2 launch trash_robot_sim detection_demo.launch.py scripted_motion:=false
 
 - `/tmp/trash_detections.jsonl` - каждая строка содержит class, confidence,
   bbox, depth, world x/y, robot pose, latency.
-- `/tmp/trash_detected` - полный кадр и crop для новых объектов.
+- `/tmp/trash_detected` - полный кадр, crop, карточка `*_card.jpg` с классом,
+  confidence, bbox, depth, world x/y, pose робота, latency и JSON-метаданные
+  `*_meta.json` для новых объектов.
 - `config/trash_ground_truth.yaml` - эталонные позиции мусора в demo world.
+
+Автоматические кадры без ручных скриншотов:
+
+Одна команда, которая сама запускает demo launch, сохраняет кадры и завершает
+процесс:
+
+```bash
+source ~/ros2_ws/install/setup.bash
+ros2 run trash_robot_sim run_demo_capture.py \
+  --output-dir /tmp/trash_demo_capture \
+  --max-frames 30 \
+  --every-n 5
+```
+
+Если демо уже запущено отдельно, можно сохранить только image topics:
+
+```bash
+source ~/ros2_ws/install/setup.bash
+ros2 run trash_robot_sim capture_ros_images.py \
+  --topic /rgbd/image/image \
+  --topic /detections_img \
+  --output-dir /tmp/trash_demo_capture \
+  --max-frames 30 \
+  --every-n 5
+```
+
+Скрипт сохраняет JPEG-кадры из ROS image topics в
+`/tmp/trash_demo_capture/rgbd__image__image/` и
+`/tmp/trash_demo_capture/detections_img/`. Это не ручной screenshot: кадры
+берутся напрямую из ROS-топиков.
 
 ## Оценка прогона
 
@@ -82,5 +114,48 @@ sim-to-demo прогона. Иллюстративные графики допу
 ## Следующий шаг после демо
 
 Перед финальной защитой нужно заменить временную/старую модель на обученную
-`best.pt`, собрать новый датасет с нормальными окурками и мелким мусором,
-прогнать long training на GPU и повторить evaluator на том же demo world.
+`models/yolov8s_trash.pt`, собрать новый датасет с нормальными окурками и
+мелким мусором, прогнать long training на GPU и повторить evaluator на том же
+demo world.
+
+## YOLOv8s Training Candidate
+
+Текущий основной датасет для следующего GPU-прогона:
+
+- `data/merged_roboflow_mvp/data.yaml`;
+- 11273 images, 27830 bbox, 6 MVP-классов;
+- readiness: `Ready for yolov8s/imgsz=960 training`;
+- классы: `cigarette_butt`, `plastic_bottle`, `aluminum_can`, `plastic_bag`,
+  `cardboard_box`, `paper_packaging`.
+
+Команда долгого обучения, когда есть GPU-время:
+
+```bash
+python3 scripts/train_yolo.py \
+  --skip-download \
+  --only-extra-datasets \
+  --class-config config/trash_classes_mvp.yaml \
+  --extra-dataset data/raw/roboflow/cigarette_butt_kimchi_v4 \
+  --extra-dataset data/raw/roboflow/trash_fyp \
+  --extra-dataset data/raw/roboflow/litterpicker \
+  --output-dir data/merged_roboflow_mvp \
+  --epochs 120 \
+  --batch 16 \
+  --imgsz 960 \
+  --base-model models/yolov8s.pt \
+  --output-model models/yolov8s_trash.pt \
+  --run-name roboflow_mvp_yolov8s_img960
+```
+
+После обучения проверить:
+
+```bash
+yolo detect val \
+  model=models/yolov8s_trash.pt \
+  data=data/merged_roboflow_mvp/data.yaml \
+  imgsz=960
+```
+
+Для дипломных метрик не полагаться только на Roboflow test split: в нем сейчас
+мало bbox. Нужен отдельный контрольный прогон в Gazebo через
+`scripts/evaluate_detection_run.py`.

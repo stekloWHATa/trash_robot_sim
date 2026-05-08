@@ -174,6 +174,56 @@ def test_load_class_config_maps_aliases(tmp_path):
     assert train_yolo._map_class('unknown class', cfg) is None
 
 
+def test_real_trash_class_config_covers_selected_dataset_aliases():
+    root = Path(__file__).resolve().parents[1]
+    cfg = train_yolo.load_class_config(str(root / 'config' / 'trash_classes.yaml'))
+
+    expected = {
+        'Cigarette_Butt': 'cigarette_butt',
+        'PET_Bottle': 'plastic_bottle',
+        'Glass_bottle': 'glass_bottle',
+        'Metal_drinkcan': 'aluminum_can',
+        'Drink can': 'aluminum_can',
+        'Food Can': 'aluminum_can',
+        'Plastic_Bag': 'plastic_bag',
+        'Garbage bag': 'plastic_bag',
+        'Other plastic wrapper': 'plastic_bag',
+        'cardboard_paper': 'cardboard_box',
+        'Corrugated carton': 'cardboard_box',
+        'Paper_carton': 'paper_packaging',
+        'Paper_cigarette_package': 'paper_packaging',
+        'Normal paper': 'paper_packaging',
+        'Tissues': 'paper_packaging',
+        'Pop tab': 'other_trash',
+    }
+
+    for source_class, canonical in expected.items():
+        assert train_yolo._map_class(source_class, cfg) == canonical
+
+
+def test_mvp_class_config_keeps_six_high_confidence_classes():
+    root = Path(__file__).resolve().parents[1]
+    cfg = train_yolo.load_class_config(str(root / 'config' / 'trash_classes_mvp.yaml'))
+
+    assert cfg['classes'] == [
+        'cigarette_butt',
+        'plastic_bottle',
+        'aluminum_can',
+        'plastic_bag',
+        'cardboard_box',
+        'paper_packaging',
+    ]
+    assert train_yolo._map_class('Glass_bottle', cfg) is None
+    assert train_yolo._map_class('PET_Bottle', cfg) == 'plastic_bottle'
+    assert train_yolo._map_class('Metal_drinkcan', cfg) == 'aluminum_can'
+
+
+def test_resolve_base_model_falls_back_to_ultralytics_name_for_known_models(tmp_path):
+    missing = tmp_path / 'models' / 'yolov8s.pt'
+
+    assert train_yolo._resolve_base_model(str(missing)) == 'yolov8s.pt'
+
+
 def test_merge_datasets_applies_class_mapping_and_skips_unmapped(tmp_path, monkeypatch):
     cfg_path = tmp_path / 'classes.yaml'
     _write_class_config(cfg_path)
@@ -252,6 +302,90 @@ def test_convert_coco_to_yolo_supports_taco_style_annotations(tmp_path):
     assert (out / 'train' / 'labels' / 'img1.txt').read_text().splitlines() == [
         '0 0.200000 0.200000 0.200000 0.200000'
     ]
+
+
+def test_convert_coco_to_yolo_auto_split_and_nested_taco_names(tmp_path):
+    cfg_path = tmp_path / 'classes.yaml'
+    _write_class_config(cfg_path)
+    class_config = train_yolo.load_class_config(str(cfg_path))
+    images = tmp_path / 'images'
+    out = tmp_path / 'taco_yolo'
+    images.mkdir()
+    coco_images = []
+    annotations = []
+    for idx in range(10):
+        batch = images / f'batch_{idx % 2}'
+        batch.mkdir(exist_ok=True)
+        (batch / f'img{idx}.jpg').write_bytes(b'fake image bytes')
+        coco_images.append({
+            'id': idx,
+            'file_name': f'batch_{idx % 2}/img{idx}.jpg',
+            'width': 100,
+            'height': 100,
+        })
+        annotations.append({
+            'id': idx,
+            'image_id': idx,
+            'category_id': 10,
+            'bbox': [10, 10, 20, 20],
+        })
+    coco = tmp_path / 'annotations.json'
+    coco.write_text(json_dump({
+        'images': coco_images,
+        'categories': [{'id': 10, 'name': 'PET Bottle'}],
+        'annotations': annotations,
+    }))
+
+    train_yolo.convert_coco_to_yolo(
+        str(coco), str(images), str(out), split='auto', class_config=class_config
+    )
+
+    assert len(list((out / 'train' / 'images').glob('*.jpg'))) == 8
+    assert len(list((out / 'valid' / 'images').glob('*.jpg'))) == 1
+    assert len(list((out / 'test' / 'images').glob('*.jpg'))) == 1
+    assert (out / 'train' / 'labels' / 'batch_0__img0.txt').is_file()
+    with open(out / 'auto_coco_convert_report.yaml') as f:
+        report = yaml.safe_load(f)
+    assert report['images'] == {'train': 8, 'valid': 1, 'test': 1}
+
+
+def test_main_only_extra_datasets_skips_default_dirs(tmp_path, monkeypatch):
+    extra = tmp_path / 'extra_ds'
+    _write_dataset(extra, ['Bottle'], {'train': {'sample': '0 0.5 0.5 0.2 0.2\n'}})
+    default_dir = tmp_path / 'default_ds'
+    _write_dataset(default_dir, ['Can'], {'train': {'default': '0 0.5 0.5 0.2 0.2\n'}})
+    captured = {}
+
+    def fake_merge(dataset_dirs, class_config=None, output_dir=None):
+        captured['dataset_dirs'] = dataset_dirs
+        captured['output_dir'] = output_dir
+        return str(tmp_path / 'merged' / 'data.yaml')
+
+    monkeypatch.setattr(train_yolo, 'DATA_ROOT', str(tmp_path))
+    monkeypatch.setattr(train_yolo, 'MODELS_DIR', str(tmp_path / 'models'))
+    monkeypatch.setattr(train_yolo, 'DATASETS', [('workspace', 'project', 1, 'default_ds')])
+    monkeypatch.setattr(train_yolo, 'merge_datasets', fake_merge)
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        [
+            'train_yolo.py',
+            '--skip-download',
+            '--prepare-only',
+            '--only-extra-datasets',
+            '--class-config',
+            str(tmp_path / 'missing.yaml'),
+            '--output-dir',
+            str(tmp_path / 'merged'),
+            '--extra-dataset',
+            str(extra),
+        ],
+    )
+
+    train_yolo.main()
+
+    assert captured['dataset_dirs'] == [str(extra)]
+    assert captured['output_dir'] == str(tmp_path / 'merged')
 
 
 def json_dump(data):

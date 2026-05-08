@@ -13,62 +13,131 @@ aliases:
     - cigarette
     - cigarette butt
     - cigarette_butt
+    - Cigarette_Butt
     - cigarettebutt
     - cigarettes-ends
     - smoking-butt
     - butt
+    - cig
   plastic_bottle:
+    - bottle plastic
+    - bottle_plastic
+    - bottle
     - plastic bottle
     - plastic_bottle
+    - Plastic_Bottle
     - plasticbottle
+    - plastic-bottles
     - pet bottle
     - pet_bottle
+    - PET_Bottle
+    - Pet_Bottle
     - clear plastic bottle
     - other plastic bottle
     - milk bottle
+    - water bottle
   glass_bottle:
+    - bottle glass
+    - bottle_glass
     - glass bottle
     - glass_bottle
-    - bottle glass
+    - Glass_bottle
+    - Glass_Bottles
     - glass jar
   aluminum_can:
     - aluminum can
+    - aluminum_cans
+    - aluminum cans
     - aluminium can
+    - aluminium
+    - metal aluminium
+    - Metal_aluminium
     - drink can
+    - drink_can
     - drinks can
-    - beer can
     - food can
+    - Food Can
+    - metal drinkcan
+    - Metal_drinkcan
+    - beer can
+    - metal foodcan
+    - Metal_foodcan
+    - soda can
+    - soda cans
+    - soda_cans
+    - can metal
+    - can_metal
     - can
     - tin
     - pull-tab can
   plastic_bag:
+    - bag plastic
+    - bag_plastic
     - plastic bag
     - plastic_bag
+    - Plastic_Bag
+    - plastic bags
+    - plastic_bags
+    - Plastic Bags
+    - plastic bag & wrapper
     - garbage bag
+    - garbage_bag
+    - Garbage_Bag
     - single-use carrier bag
     - polypropylene bag
     - zip plastic bag
     - stretch film
+    - plastic film
+    - other plastic wrapper
+    - plastic wrapper
+    - crisp packet
   cardboard_box:
     - cardboard
+    - cardboard_paper
+    - cardboard paper
     - cardboard box
+    - cardboard_box
+    - cardboard boxes
     - carton box
+    - carton_box
     - corrugated carton
     - postal packaging
     - pizza box
     - other carton
+    - egg carton
+    - meal carton
+    - kardus kertas
   paper_packaging:
     - paper
     - normal paper
+    - bag paper
+    - bag_paper
     - paper bag
+    - paper_bag
     - paper cup
+    - paper_cup
     - paper cups
     - paperbox
     - paper box
+    - paper_box
+    - paper carton
+    - Paper_carton
+    - paper cigarette package
+    - Paper_cigarette_package
+    - paper fragment
+    - Paper_fragment
+    - paper wrapper
     - drink carton
+    - drink_carton
     - tetra pack
+    - tetrapak
+    - carton drink
+    - carton_drink
+    - uht carton
     - magazine paper
     - wrapping paper
+    - tissues
+    - toilet tube
   other_trash:
     - disposable tableware
     - disposable plastic cup
@@ -77,8 +146,17 @@ aliases:
     - plastic canister
     - plastic caps
     - plastic lid
-    - plastic film
-    - crisp packet
+    - pop tab
+    - shoe
+    - unlabeled litter
+    - styrofoam piece
+    - battery
+    - aerosol
+    - blister pack
+    - aluminium blister pack
+    - carded blister pack
+    - squeezable tube
+    - rope & strings
     - food waste
     - broken glass
     - plastic straw

@@ -20,7 +20,7 @@ detector.py — детекция и пространственная локал�
   /odom               — поза робота в мире
 
 Параметры (ROS):
-  model_path     — путь к файлу .pt (по умолчанию: share/models/yolov8n_trash.pt)
+  model_path     — путь к файлу .pt (по умолчанию: share/models/yolov8s_trash.pt)
   conf_thresh    — порог уверенности YOLO (default 0.35)
   merge_dist     — радиус слияния детекций, м (default 1.2)
   detect_rate    — частота запуска инференса, Гц (default 4)
@@ -175,7 +175,8 @@ class Detector(Node):
 
         # ── Параметры ──────────────────────────────────────────────────── #
         pkg = get_package_share_directory('trash_robot_sim')
-        default_model = os.path.join(pkg, 'models', 'yolov8n_trash.pt')
+        default_model = os.path.join(pkg, 'models', 'yolov8s_trash.pt')
+        fallback_model = os.path.join(pkg, 'models', 'yolov8n_trash.pt')
 
         self.declare_parameter('model_path',  default_model)
         self.declare_parameter('conf_thresh', 0.35)
@@ -225,6 +226,12 @@ class Detector(Node):
 
         # ── Загрузка YOLOv8 ────────────────────────────────────────────── #
         model_path = str(self.get_parameter('model_path').value) or default_model
+        if model_path == default_model and not os.path.isfile(model_path) and os.path.isfile(fallback_model):
+            self.get_logger().warn(
+                f'Основная yolov8s-модель не найдена: {default_model}; '
+                f'временно использую старую baseline-модель: {fallback_model}'
+            )
+            model_path = fallback_model
         self._model = None
         self._is_coco = True  # до загрузки — безопасный default
         if _YOLO_OK:
@@ -240,8 +247,8 @@ class Detector(Node):
             else:
                 self.get_logger().warn(
                     f'Файл модели не найден: {model_path}\n'
-                    f'  Запустите: yolo export model=yolov8n.pt format=pt\n'
-                    f'  и скопируйте yolov8n.pt в {os.path.dirname(model_path)}'
+                    f'  Обучите YOLOv8s через scripts/train_yolo.py\n'
+                    f'  или укажите свежий best.pt в trash_detector.model_path'
                 )
         else:
             self.get_logger().error(
@@ -463,18 +470,34 @@ class Detector(Node):
             elif self._localization == 'ground_plane':
                 wx, wy = self._pixel_to_world_ground(u, v)
 
+            world_xy = (wx, wy) if wx is not None else None
             if wx is not None:
                 if self._register(wx, wy, category, label, conf_val,
-                                  annotated, (u, v, x1, y1, x2, y2)):
+                                  annotated, (u, v, x1, y1, x2, y2),
+                                  depth=d,
+                                  inference_ms=inference_ms,
+                                  frame_seq=frame_seq):
                     found_new = True
             object_id = self._last_registered_id if wx is not None else None
+            self._draw_detection_info(
+                annotated,
+                label=label,
+                category=category,
+                conf=conf_val,
+                bbox_xyxy=(x1, y1, x2, y2),
+                depth=d,
+                world=world_xy,
+                object_id=object_id,
+                inference_ms=inference_ms,
+                frame_seq=frame_seq,
+            )
             self._log_detection(
                 label=label,
                 category=category,
                 conf=conf_val,
                 bbox=(x1, y1, x2, y2),
                 depth=d,
-                world=(wx, wy) if wx is not None else None,
+                world=world_xy,
                 object_id=object_id,
                 inference_ms=inference_ms,
                 frame_seq=frame_seq,
@@ -604,7 +627,10 @@ class Detector(Node):
     def _register(self, wx: float, wy: float, category: str,
                   label: str, conf: float,
                   frame_bgr: np.ndarray | None = None,
-                  bbox: tuple | None = None) -> bool:
+                  bbox: tuple | None = None,
+                  depth: float | None = None,
+                  inference_ms: float | None = None,
+                  frame_seq: int | None = None) -> bool:
         """
         Добавляет объект в базу или обновляет уверенность существующего.
         Возвращает True, если добавлен НОВЫЙ объект.
@@ -640,23 +666,248 @@ class Detector(Node):
 
         # Сохраняем снимок нового объекта
         if self._save_crops and frame_bgr is not None and bbox is not None:
-            self._save_detection(tid, label, conf, frame_bgr, bbox)
+            self._save_detection(
+                tid=tid,
+                label=label,
+                category=category,
+                conf=conf,
+                frame_bgr=frame_bgr,
+                bbox=bbox,
+                depth=depth,
+                world=(wx, wy),
+                inference_ms=inference_ms,
+                frame_seq=frame_seq,
+            )
 
         return True
 
-    def _save_detection(self, tid: int, label: str, conf: float,
-                        frame_bgr: np.ndarray, bbox: tuple):
-        """Сохраняет аннотированный кадр и вырезанный bbox в /tmp/trash_detected/."""
-        ts = datetime.now().strftime('%H%M%S_%f')[:10]
-        safe_label = label.replace(' ', '_')
+    @staticmethod
+    def _safe_filename(value: str) -> str:
+        safe = ''.join(
+            ch if ch.isalnum() or ch in ('_', '-') else '_'
+            for ch in str(value).strip().replace(' ', '_')
+        )
+        return safe or 'trash'
 
-        # Полный кадр с bbox
+    def _detection_metadata(self, object_id: int | None,
+                            label: str,
+                            category: str,
+                            conf: float,
+                            bbox_xyxy: tuple[float, float, float, float],
+                            depth: float | None,
+                            world: tuple[float, float] | None,
+                            inference_ms: float | None,
+                            frame_seq: int | None) -> dict:
+        x1, y1, x2, y2 = bbox_xyxy
+        return {
+            'saved_at': datetime.now().isoformat(timespec='seconds'),
+            'object_id': object_id,
+            'class': category,
+            'label': label,
+            'confidence': float(conf),
+            'bbox_xyxy': [float(x1), float(y1), float(x2), float(y2)],
+            'bbox_center': [float((x1 + x2) / 2.0), float((y1 + y2) / 2.0)],
+            'bbox_size_px': [float(x2 - x1), float(y2 - y1)],
+            'depth_m': None if depth is None else float(depth),
+            'world': None if world is None else {
+                'x': float(world[0]),
+                'y': float(world[1]),
+            },
+            'robot': {
+                'x': float(getattr(self, '_robot_x', 0.0)),
+                'y': float(getattr(self, '_robot_y', 0.0)),
+                'yaw': float(getattr(self, '_robot_yaw', 0.0)),
+            },
+            'camera_mode': getattr(self, '_camera_mode', 'unknown'),
+            'inference_ms': None if inference_ms is None else float(inference_ms),
+            'frame_seq': frame_seq,
+        }
+
+    def _detection_stat_lines(self, object_id: int | None,
+                              label: str,
+                              category: str,
+                              conf: float,
+                              bbox_xyxy: tuple[float, float, float, float],
+                              depth: float | None,
+                              world: tuple[float, float] | None,
+                              inference_ms: float | None,
+                              frame_seq: int | None,
+                              compact: bool = False) -> list[str]:
+        x1, y1, x2, y2 = bbox_xyxy
+        cx = (x1 + x2) / 2.0
+        cy = (y1 + y2) / 2.0
+        obj = 'n/a' if object_id is None else str(object_id)
+        depth_text = 'n/a' if depth is None else f'{depth:.2f} m'
+        world_text = (
+            'n/a'
+            if world is None
+            else f'x={world[0]:.2f} y={world[1]:.2f} m'
+        )
+        inf_text = 'n/a' if inference_ms is None else f'{inference_ms:.1f} ms'
+        if compact:
+            return [
+                f'#{obj} {category} ({conf:.2f})',
+                f'world: {world_text}',
+                f'depth: {depth_text}',
+                f'bbox: {x1:.0f},{y1:.0f},{x2:.0f},{y2:.0f}',
+                f'inf: {inf_text} frame: {frame_seq}',
+            ]
+        return [
+            f'object_id: {obj}',
+            f'class: {category}',
+            f'label: {label}',
+            f'confidence: {conf:.3f}',
+            f'bbox_xyxy: {x1:.0f}, {y1:.0f}, {x2:.0f}, {y2:.0f}',
+            f'bbox_center_px: {cx:.0f}, {cy:.0f}',
+            f'bbox_size_px: {x2 - x1:.0f} x {y2 - y1:.0f}',
+            f'depth: {depth_text}',
+            f'world: {world_text}',
+            f'robot: x={getattr(self, "_robot_x", 0.0):.2f} '
+            f'y={getattr(self, "_robot_y", 0.0):.2f} '
+            f'yaw={getattr(self, "_robot_yaw", 0.0):.2f}',
+            f'camera_mode: {getattr(self, "_camera_mode", "unknown")}',
+            f'inference: {inf_text}',
+            f'frame_seq: {frame_seq}',
+        ]
+
+    def _draw_detection_info(self, frame: np.ndarray,
+                             label: str,
+                             category: str,
+                             conf: float,
+                             bbox_xyxy: tuple[float, float, float, float],
+                             depth: float | None,
+                             world: tuple[float, float] | None,
+                             object_id: int | None,
+                             inference_ms: float | None,
+                             frame_seq: int | None) -> None:
+        """Рисует bbox и компактную статистику прямо на кадре."""
+        if frame is None or frame.size == 0:
+            return
+        h, w = frame.shape[:2]
+        x1, y1, x2, y2 = bbox_xyxy
+        bx1 = int(np.clip(x1, 0, max(0, w - 1)))
+        by1 = int(np.clip(y1, 0, max(0, h - 1)))
+        bx2 = int(np.clip(x2, 0, max(0, w - 1)))
+        by2 = int(np.clip(y2, 0, max(0, h - 1)))
+        cv2.rectangle(frame, (bx1, by1), (bx2, by2), (0, 255, 0), 2)
+
+        lines = self._detection_stat_lines(
+            object_id=object_id,
+            label=label,
+            category=category,
+            conf=conf,
+            bbox_xyxy=bbox_xyxy,
+            depth=depth,
+            world=world,
+            inference_ms=inference_ms,
+            frame_seq=frame_seq,
+            compact=True,
+        )
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.42
+        thickness = 1
+        line_height = 16
+        pad = 5
+        max_lines = max(1, (h - 2 * pad) // line_height)
+        lines = lines[:max_lines]
+        text_sizes = [cv2.getTextSize(line, font, font_scale, thickness)[0] for line in lines]
+        panel_w = min(w, max(size[0] for size in text_sizes) + 2 * pad)
+        panel_h = min(h, line_height * len(lines) + 2 * pad)
+        px = max(0, min(bx1, w - panel_w))
+        py_above = by1 - panel_h - 4
+        py = py_above if py_above >= 0 else min(max(0, by2 + 4), max(0, h - panel_h))
+
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (px, py), (px + panel_w, py + panel_h), (16, 16, 16), -1)
+        cv2.addWeighted(overlay, 0.70, frame, 0.30, 0.0, frame)
+        for idx, line in enumerate(lines):
+            y = py + pad + (idx + 1) * line_height - 3
+            cv2.putText(frame, line, (px + pad, y), font, font_scale,
+                        (255, 255, 255), thickness, cv2.LINE_AA)
+
+    def _make_detection_card(self, crop: np.ndarray, lines: list[str]) -> np.ndarray:
+        """Создает crop-карточку: слева объект, справа подробная статистика."""
+        crop_vis = crop.copy()
+        ch, cw = crop_vis.shape[:2]
+        if ch == 0 or cw == 0:
+            return crop_vis
+
+        max_side = max(ch, cw)
+        if max_side < 180:
+            scale = 180.0 / max_side
+            crop_vis = cv2.resize(
+                crop_vis,
+                (max(1, int(cw * scale)), max(1, int(ch * scale))),
+                interpolation=cv2.INTER_LINEAR,
+            )
+        elif max_side > 520:
+            scale = 520.0 / max_side
+            crop_vis = cv2.resize(
+                crop_vis,
+                (max(1, int(cw * scale)), max(1, int(ch * scale))),
+                interpolation=cv2.INTER_AREA,
+            )
+
+        ch, cw = crop_vis.shape[:2]
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.50
+        thickness = 1
+        line_height = 21
+        pad = 14
+        panel_w = 470
+        panel_h = line_height * len(lines) + 2 * pad
+        card_h = max(ch, panel_h)
+        card = np.full((card_h, cw + panel_w, 3), 245, dtype=np.uint8)
+        card[:ch, :cw] = crop_vis
+        cv2.rectangle(card, (cw, 0), (cw + panel_w, card_h), (24, 24, 24), -1)
+        for idx, line in enumerate(lines):
+            y = pad + (idx + 1) * line_height - 4
+            cv2.putText(card, line[:62], (cw + pad, y), font, font_scale,
+                        (245, 245, 245), thickness, cv2.LINE_AA)
+        return card
+
+    def _save_detection(self, tid: int, label: str, category: str, conf: float,
+                        frame_bgr: np.ndarray, bbox: tuple,
+                        depth: float | None = None,
+                        world: tuple[float, float] | None = None,
+                        inference_ms: float | None = None,
+                        frame_seq: int | None = None):
+        """Сохраняет кадр, crop-card и JSON-метаданные в /tmp/trash_detected/."""
+        ts = datetime.now().strftime('%H%M%S_%f')[:10]
+        safe_label = self._safe_filename(label)
+        _u, _v, x1, y1, x2, y2 = bbox
+        bbox_xyxy = (x1, y1, x2, y2)
+        lines = self._detection_stat_lines(
+            object_id=tid,
+            label=label,
+            category=category,
+            conf=conf,
+            bbox_xyxy=bbox_xyxy,
+            depth=depth,
+            world=world,
+            inference_ms=inference_ms,
+            frame_seq=frame_seq,
+        )
+
+        # Полный кадр с bbox и статистикой.
+        full_frame = frame_bgr.copy()
+        self._draw_detection_info(
+            full_frame,
+            label=label,
+            category=category,
+            conf=conf,
+            bbox_xyxy=bbox_xyxy,
+            depth=depth,
+            world=world,
+            object_id=tid,
+            inference_ms=inference_ms,
+            frame_seq=frame_seq,
+        )
         full_path = os.path.join(
             self._save_dir, f'{ts}_id{tid:03d}_{safe_label}_full.jpg')
-        cv2.imwrite(full_path, frame_bgr)
+        cv2.imwrite(full_path, full_frame)
 
-        # Кроп bbox (с небольшим отступом)
-        u, v, x1, y1, x2, y2 = bbox
+        # Кроп bbox (с небольшим отступом) и отдельная карточка с текстовой панелью.
         h, w = frame_bgr.shape[:2]
         pad = 20
         cx1 = max(0, int(x1) - pad)
@@ -668,6 +919,30 @@ class Detector(Node):
             crop_path = os.path.join(
                 self._save_dir, f'{ts}_id{tid:03d}_{safe_label}_crop.jpg')
             cv2.imwrite(crop_path, crop)
+            card = self._make_detection_card(crop, lines)
+            card_path = os.path.join(
+                self._save_dir, f'{ts}_id{tid:03d}_{safe_label}_card.jpg')
+            cv2.imwrite(card_path, card)
+
+        meta_path = os.path.join(
+            self._save_dir, f'{ts}_id{tid:03d}_{safe_label}_meta.json')
+        with open(meta_path, 'w', encoding='utf-8') as f:
+            json.dump(
+                self._detection_metadata(
+                    object_id=tid,
+                    label=label,
+                    category=category,
+                    conf=conf,
+                    bbox_xyxy=bbox_xyxy,
+                    depth=depth,
+                    world=world,
+                    inference_ms=inference_ms,
+                    frame_seq=frame_seq,
+                ),
+                f,
+                ensure_ascii=False,
+                indent=2,
+            )
         self.get_logger().info(f'  → сохранено: {full_path}')
 
     @staticmethod

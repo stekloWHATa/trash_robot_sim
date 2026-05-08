@@ -22,6 +22,9 @@ install(PROGRAMS
   scripts/detector.py
   scripts/train_yolo.py
   scripts/audit_dataset.py
+  scripts/check_dataset_readiness.py
+  scripts/capture_ros_images.py
+  scripts/run_demo_capture.py
   scripts/evaluate_detection_run.py
   scripts/generate_textured_trash_assets.py
   scripts/scripted_motion.py

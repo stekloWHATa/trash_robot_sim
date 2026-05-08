@@ -78,7 +78,8 @@ ros2 launch trash_robot_sim rviz.launch.py
   `worlds/detection_demo_world.sdf`;
 - RViz: `/map`, `/trash_markers`, `/detections_img`;
 - лог детектора: `/tmp/trash_detections.jsonl`;
-- кропы новых объектов: `/tmp/trash_detected`.
+- фото новых объектов: `/tmp/trash_detected` (`*_full.jpg`, `*_crop.jpg`,
+  `*_card.jpg`, `*_meta.json`).
 
 Модели мусора подключены как скачанные `.glb` mesh-assets из Poly Pizza
 (`models/trash/ASSET_SOURCES.md`): Kenney/Quaternius CC0 и один CC-BY окурок
@@ -98,6 +99,14 @@ python3 scripts/evaluate_detection_run.py \
   --detections /tmp/trash_detections.jsonl
 ```
 
+Автоматически сохранить кадры из Gazebo/детектора без ручных скриншотов:
+
+```bash
+ros2 run trash_robot_sim run_demo_capture.py \
+  --output-dir /tmp/trash_demo_capture \
+  --max-frames 30
+```
+
 Старый полный запуск с навигатором остается доступен:
 
 ```bash
@@ -106,16 +115,19 @@ ros2 launch trash_robot_sim gazebo.launch.py
 
 ## YOLOv8-датасет
 
-Целевая таксономия лежит в `config/trash_classes.yaml`:
+Для финального обучения под 80-85% используем MVP-таксономию
+`config/trash_classes_mvp.yaml`:
 
 - `cigarette_butt`
 - `plastic_bottle`
-- `glass_bottle`
 - `aluminum_can`
 - `plastic_bag`
 - `cardboard_box`
 - `paper_packaging`
-- `other_trash`
+
+Полная таксономия на 8 классов остается в `config/trash_classes.yaml`, но
+`glass_bottle` и `other_trash` лучше подключать после стабильного результата на
+MVP-классах.
 
 Подготовить новый merged-набор без запуска долгого обучения:
 
@@ -138,9 +150,11 @@ python3 scripts/audit_dataset.py data/merged_v2/data.yaml
 
 ```bash
 python3 scripts/train_yolo.py \
+  --skip-download \
   --coco-json /path/to/annotations.json \
   --coco-images /path/to/images \
   --coco-output data/taco_yolo \
+  --coco-split auto \
   --prepare-only
 ```
 
@@ -156,7 +170,17 @@ python3 scripts/train_yolo.py \
 Долгое обучение запускать только после аудита:
 
 ```bash
-python3 scripts/train_yolo.py --skip-download --extra-dataset data/taco_yolo --epochs 100
+python3 scripts/check_dataset_readiness.py data/taco_only_detection_v1/data.yaml
+
+python3 scripts/train_yolo.py \
+  --skip-download \
+  --extra-dataset data/taco_yolo \
+  --output-dir data/taco_only_detection_v1 \
+  --epochs 120 \
+  --imgsz 960 \
+  --base-model models/yolov8s.pt \
+  --output-model models/yolov8s_trash.pt \
+  --run-name taco_only_yolov8s_img960
 ```
 
 ## Параметры
@@ -167,13 +191,13 @@ python3 scripts/train_yolo.py --skip-download --extra-dataset data/taco_yolo --e
 
 | Параметр | Значение | Описание |
 |---|---:|---|
-| `model_path` | `""` | Пусто = `share/models/yolov8n_trash.pt`; можно указать абсолютный путь к `best.pt` |
+| `model_path` | `""` | Пусто = `share/models/yolov8s_trash.pt`; если ее нет, временный fallback на `yolov8n_trash.pt` |
 | `conf_thresh` | `0.35` | Порог уверенности YOLO |
 | `merge_dist` | `1.2` | Радиус слияния повторных 3D-детекций |
 | `detect_rate` | `4.0` | Частота инференса |
 | `camera_mode` | `rgbd` | RGB и depth из одной RGBD-камеры |
 | `log_path` | `/tmp/trash_detections.jsonl` | JSONL-журнал bbox/depth/world/latency |
-| `save_crops` | `true` | Сохранять кадр и crop новых объектов |
+| `save_crops` | `true` | Сохранять кадр, crop, карточку объекта и JSON-метаданные |
 | `min_depth`/`max_depth` | `0.10`/`10.0` | Фильтр валидной depth-карты |
 | `class_conf_overrides` | `""` | Порог по классам, например `cigarette_butt:0.2` |
 

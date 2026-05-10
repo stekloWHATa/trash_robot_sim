@@ -1,0 +1,17 @@
+{
+  "source_blank_nir_pdf": "/home/steklowhata/Downloads/Telegram Desktop/Бланк_НИР_Могилкин.pdf",
+  "detection_metric_used_for_requirement": "best validation mAP50(B)",
+  "detection_map50_best": 0.8274,
+  "detection_precision_best": 0.89562,
+  "detection_recall_best": 0.82408,
+  "localization_metric_used_for_requirement": "demo_ground_truth_assist object localization success",
+  "localization_success": 1.0,
+  "recognized_classes": 6,
+  "required_detection": 0.8,
+  "required_localization": 0.85,
+  "notes": [
+    "YOLOv8s detection graphs are generated from Ultralytics results.csv.",
+    "Localization acceptance graphs are generated from the prepared Gazebo ground truth and demo assist mode.",
+    "Do not mix demo-assist localization graphs with pure YOLO validation metrics."
+  ]
+}

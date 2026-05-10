@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="660" viewBox="0 0 1120 660">
+<rect width="100%" height="100%" fill="#fff"/>
+<text x="560.0" y="42" text-anchor="middle" font-family="DejaVu Sans, Arial" font-size="27" font-weight="700">Сравнение базовой модели и YOLOv8s по mAP50</text>
+<line x1="130" y1="85" x2="130" y2="505" stroke="#333" stroke-width="2"/>
+<line x1="130" y1="505" x2="1065" y2="505" stroke="#333" stroke-width="2"/>
+<text x="28" y="295.0" transform="rotate(-90 28 295.0)" text-anchor="middle" font-family="DejaVu Sans, Arial" font-size="17">mAP50</text>
+<line x1="130" y1="505.0" x2="1065" y2="505.0" stroke="#e7e7e7"/>
+<text x="118" y="510.0" text-anchor="end" font-family="DejaVu Sans, Arial" font-size="13">0.00</text>
+<line x1="130" y1="421.0" x2="1065" y2="421.0" stroke="#e7e7e7"/>
+<text x="118" y="426.0" text-anchor="end" font-family="DejaVu Sans, Arial" font-size="13">0.20</text>
+<line x1="130" y1="337.0" x2="1065" y2="337.0" stroke="#e7e7e7"/>
+<text x="118" y="342.0" text-anchor="end" font-family="DejaVu Sans, Arial" font-size="13">0.40</text>
+<line x1="130" y1="253.0" x2="1065" y2="253.0" stroke="#e7e7e7"/>
+<text x="118" y="258.0" text-anchor="end" font-family="DejaVu Sans, Arial" font-size="13">0.60</text>
+<line x1="130" y1="169.0" x2="1065" y2="169.0" stroke="#e7e7e7"/>
+<text x="118" y="174.0" text-anchor="end" font-family="DejaVu Sans, Arial" font-size="13">0.80</text>
+<line x1="130" y1="85.0" x2="1065" y2="85.0" stroke="#e7e7e7"/>
+<text x="118" y="90.0" text-anchor="end" font-family="DejaVu Sans, Arial" font-size="13">1.00</text>
+<line x1="130" y1="169.0" x2="1065" y2="169.0" stroke="#EB5757" stroke-width="3" stroke-dasharray="8 7"/>
+<text x="1059" y="161.0" text-anchor="end" font-family="DejaVu Sans, Arial" font-size="15" fill="#B00020">норма 0.80</text>
+<rect x="323.8" y="364.8" width="80.0" height="140.2" fill="#9B51E0" rx="5"/>
+<text x="363.8" y="354.8" text-anchor="middle" font-family="DejaVu Sans, Arial" font-size="14" font-weight="700">0.33</text>
+<text x="363.8" y="529.0" text-anchor="end" transform="rotate(-35 363.8 529.0)" font-family="DejaVu Sans, Arial" font-size="13">старая YOLOv8n</text>
+<rect x="791.2" y="157.5" width="80.0" height="347.5" fill="#27AE60" rx="5"/>
+<text x="831.2" y="147.5" text-anchor="middle" font-family="DejaVu Sans, Arial" font-size="14" font-weight="700">0.83</text>
+<text x="831.2" y="529.0" text-anchor="end" transform="rotate(-35 831.2 529.0)" font-family="DejaVu Sans, Arial" font-size="13">лучшая YOLOv8s</text>
+</svg>

@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="700" viewBox="0 0 1120 700">
+<rect width="100%" height="100%" fill="#fff"/>
+<text x="560.0" y="42" text-anchor="middle" font-family="DejaVu Sans, Arial" font-size="27" font-weight="700">Расположение мусора и траектория робота в Gazebo</text>
+<rect x="90" y="70" width="800" height="550" fill="#fbfbfb" stroke="#333" stroke-width="2"/>
+<line x1="90.0" y1="70" x2="90.0" y2="620" stroke="#e7e7e7"/>
+<line x1="90" y1="70.0" x2="890" y2="70.0" stroke="#e7e7e7"/>
+<line x1="204.3" y1="70" x2="204.3" y2="620" stroke="#e7e7e7"/>
+<line x1="90" y1="148.6" x2="890" y2="148.6" stroke="#e7e7e7"/>
+<line x1="318.6" y1="70" x2="318.6" y2="620" stroke="#e7e7e7"/>
+<line x1="90" y1="227.1" x2="890" y2="227.1" stroke="#e7e7e7"/>
+<line x1="432.9" y1="70" x2="432.9" y2="620" stroke="#e7e7e7"/>
+<line x1="90" y1="305.7" x2="890" y2="305.7" stroke="#e7e7e7"/>
+<line x1="547.1" y1="70" x2="547.1" y2="620" stroke="#e7e7e7"/>
+<line x1="90" y1="384.3" x2="890" y2="384.3" stroke="#e7e7e7"/>
+<line x1="661.4" y1="70" x2="661.4" y2="620" stroke="#e7e7e7"/>
+<line x1="90" y1="462.9" x2="890" y2="462.9" stroke="#e7e7e7"/>
+<line x1="775.7" y1="70" x2="775.7" y2="620" stroke="#e7e7e7"/>
+<line x1="90" y1="541.4" x2="890" y2="541.4" stroke="#e7e7e7"/>
+<line x1="890.0" y1="70" x2="890.0" y2="620" stroke="#e7e7e7"/>
+<line x1="90" y1="620.0" x2="890" y2="620.0" stroke="#e7e7e7"/>
+<polyline points="141.6,309.4 257.7,248.2 373.9,411.2 490.0,248.2 606.1,411.2 722.3,248.2 838.4,411.2" fill="none" stroke="#FF4D00" stroke-width="4"/>
+<circle cx="183.5" cy="151.5" r="10" fill="#2F80ED" stroke="#222" stroke-width="1.5"/>
+<text x="197.5" y="139.5" font-family="DejaVu Sans, Arial" font-size="13" font-weight="700">окурок</text>
+<circle cx="315.8" cy="538.5" r="10" fill="#27AE60" stroke="#222" stroke-width="1.5"/>
+<text x="329.8" y="526.5" font-family="DejaVu Sans, Arial" font-size="13" font-weight="700">алюминиевая банка</text>
+<circle cx="431.9" cy="151.5" r="10" fill="#F2994A" stroke="#222" stroke-width="1.5"/>
+<text x="445.9" y="139.5" font-family="DejaVu Sans, Arial" font-size="13" font-weight="700">пластиковая бутылка</text>
+<circle cx="548.1" cy="538.5" r="10" fill="#EB5757" stroke="#222" stroke-width="1.5"/>
+<text x="562.1" y="526.5" font-family="DejaVu Sans, Arial" font-size="13" font-weight="700">мусорный пакет</text>
+<circle cx="664.2" cy="151.5" r="10" fill="#9B51E0" stroke="#222" stroke-width="1.5"/>
+<text x="678.2" y="139.5" font-family="DejaVu Sans, Arial" font-size="13" font-weight="700">картонная коробка</text>
+<circle cx="780.3" cy="538.5" r="10" fill="#00A7A7" stroke="#222" stroke-width="1.5"/>
+<text x="794.3" y="526.5" font-family="DejaVu Sans, Arial" font-size="13" font-weight="700">упаковка/пачка</text>
+<text x="490.0" y="676" text-anchor="middle" font-family="DejaVu Sans, Arial" font-size="16">координата X сцены, м</text>
+<text x="25" y="345.0" transform="rotate(-90 25 345.0)" text-anchor="middle" font-family="DejaVu Sans, Arial" font-size="16">координата Y сцены, м</text>
+</svg>

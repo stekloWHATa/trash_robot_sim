@@ -1,0 +1,139 @@
+{
+  "match_distance_m": 0.75,
+  "counts": {
+    "ground_truth": 6,
+    "detections_raw": 4818,
+    "detections_evaluated": 2,
+    "tp": 0,
+    "fp": 2,
+    "fn": 6
+  },
+  "metrics": {
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": null
+  },
+  "per_class": {
+    "aluminum_can": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "precision": null,
+      "recall": 0.0,
+      "f1": null
+    },
+    "cardboard_box": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "precision": null,
+      "recall": 0.0,
+      "f1": null
+    },
+    "cigarette_butt": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "precision": null,
+      "recall": 0.0,
+      "f1": null
+    },
+    "paper_packaging": {
+      "tp": 0,
+      "fp": 2,
+      "fn": 1,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": null
+    },
+    "plastic_bag": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "precision": null,
+      "recall": 0.0,
+      "f1": null
+    },
+    "plastic_bottle": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "precision": null,
+      "recall": 0.0,
+      "f1": null
+    }
+  },
+  "localization_error_m": {
+    "mean": null,
+    "median": null,
+    "max": null
+  },
+  "performance": {
+    "fps_estimate_from_log": 1.6922735096863064,
+    "logged_frames": 2645,
+    "inference_ms_mean": 12.134097797843113,
+    "inference_ms_median": 11.861991499927171,
+    "inference_ms_max": 35.7522690001133
+  },
+  "matches": [],
+  "unmatched_ground_truth": [
+    {
+      "id": "demo_cigarette_butt_1",
+      "class": "cigarette_butt",
+      "x": 0.65,
+      "y": -0.45,
+      "z": 0.005
+    },
+    {
+      "id": "demo_aluminum_can_1",
+      "class": "aluminum_can",
+      "x": 2.7,
+      "y": -4.25,
+      "z": 0.06
+    },
+    {
+      "id": "demo_plastic_bottle_1",
+      "class": "plastic_bottle",
+      "x": 4.5,
+      "y": -0.45,
+      "z": 0.125
+    },
+    {
+      "id": "demo_plastic_bag_1",
+      "class": "plastic_bag",
+      "x": 6.3,
+      "y": -4.25,
+      "z": 0.15
+    },
+    {
+      "id": "demo_cardboard_box_1",
+      "class": "cardboard_box",
+      "x": 8.1,
+      "y": -0.45,
+      "z": 0.17
+    },
+    {
+      "id": "demo_paper_packaging_1",
+      "class": "paper_packaging",
+      "x": 9.9,
+      "y": -4.25,
+      "z": 0.02
+    }
+  ],
+  "unmatched_detections": [
+    {
+      "object_id": 0,
+      "class": "paper_packaging",
+      "confidence": 0.8939398527145386,
+      "x": 7.8991639794807185,
+      "y": -2.4705257036066177
+    },
+    {
+      "object_id": 1,
+      "class": "paper_packaging",
+      "confidence": 0.3799247741699219,
+      "x": 2.4040488866340874,
+      "y": -2.946485746006979
+    }
+  ]
+}

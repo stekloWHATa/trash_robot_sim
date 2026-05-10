@@ -75,15 +75,16 @@ ros2 launch trash_robot_sim rviz.launch.py
 Что смотреть/записывать:
 
 - Gazebo: робот проезжает мимо подготовленного мусора в
-  `worlds/detection_demo_world.sdf`;
+  `worlds/detection_demo_world.sdf`; сцена 24 x 14 м, без декоративных стен,
+  мусор разложен вдоль зигзагообразного scripted route;
 - RViz: `/map`, `/trash_markers`, `/detections_img`;
 - лог детектора: `/tmp/trash_detections.jsonl`;
 - фото новых объектов: `/tmp/trash_detected` (`*_full.jpg`, `*_crop.jpg`,
   `*_card.jpg`, `*_meta.json`).
 
-Модели мусора подключены как скачанные `.glb` mesh-assets из Poly Pizza
-(`models/trash/ASSET_SOURCES.md`): Kenney/Quaternius CC0 и один CC-BY окурок
-Poly by Google.
+Модели мусора подключены как mesh-assets (`models/trash/ASSET_SOURCES.md`):
+скачанные `.glb` из Poly Pizza для бутылок/банки/коробки/пакета/окурка и
+локальный цветной DAE для `paper_packaging` в виде смятой пачки чипсов.
 
 Статичный запуск без scripted motion:
 
@@ -98,6 +99,19 @@ python3 scripts/evaluate_detection_run.py \
   --ground-truth config/trash_ground_truth.yaml \
   --detections /tmp/trash_detections.jsonl
 ```
+
+Сгенерировать отдельную папку с графиками/таблицами для диплома:
+
+```bash
+python3 scripts/generate_demo_report_assets.py \
+  --ground-truth config/trash_ground_truth.yaml \
+  --detections /tmp/trash_detections.jsonl \
+  --output-dir reports/detection_demo/latest
+```
+
+Для видеозаписи в `config/params.yaml` включен `demo_ground_truth_assist`.
+Он помечает строки лога как `source=demo_ground_truth_assist`, чтобы красивое
+демо Gazebo не смешивалось с честной YOLO-валидацией.
 
 Автоматически сохранить кадры из Gazebo/детектора без ручных скриншотов:
 

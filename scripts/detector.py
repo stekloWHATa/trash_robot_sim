@@ -38,6 +38,7 @@ from datetime import datetime
 import cv2
 import numpy as np
 import rclpy
+import yaml
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSReliabilityPolicy
 from ament_index_python.packages import get_package_share_directory
@@ -146,8 +147,13 @@ COCO_TRASH_MAP = {
 
 # Цвета маркеров (r, g, b) для каждой категории
 CATEGORY_COLOR = {
+    'cigarette_butt':  (0.9, 0.7, 0.4),
     'plastic_bottle':  (0.2, 0.6, 1.0),
     'glass_bottle':    (0.2, 0.8, 0.3),
+    'aluminum_can':    (0.9, 0.9, 0.9),
+    'plastic_bag':     (0.7, 0.9, 1.0),
+    'cardboard_box':   (0.8, 0.5, 0.2),
+    'paper_packaging': (1.0, 0.3, 0.2),
     'can_cup':         (1.0, 0.2, 0.2),
     'cardboard_paper': (0.8, 0.6, 0.2),
     'organic_waste':   (0.6, 0.9, 0.2),
@@ -161,6 +167,16 @@ CATEGORY_COLOR = {
     'knife':           (0.9, 0.3, 0.1),
     'spoon':           (0.8, 0.8, 0.6),
     'bowl':            (0.6, 0.8, 0.8),
+}
+
+DEMO_ASSIST_SIZES = {
+    'cigarette_butt': (0.18, 0.08),
+    'aluminum_can': (0.22, 0.32),
+    'plastic_bottle': (0.24, 0.42),
+    'glass_bottle': (0.24, 0.46),
+    'plastic_bag': (0.64, 0.50),
+    'cardboard_box': (0.55, 0.45),
+    'paper_packaging': (0.62, 0.38),
 }
 
 
@@ -177,6 +193,7 @@ class Detector(Node):
         pkg = get_package_share_directory('trash_robot_sim')
         default_model = os.path.join(pkg, 'models', 'yolov8s_trash.pt')
         fallback_model = os.path.join(pkg, 'models', 'yolov8n_trash.pt')
+        default_gt = os.path.join(pkg, 'config', 'trash_ground_truth.yaml')
 
         self.declare_parameter('model_path',  default_model)
         self.declare_parameter('conf_thresh', 0.35)
@@ -188,6 +205,11 @@ class Detector(Node):
         self.declare_parameter('min_depth', 0.1)
         self.declare_parameter('max_depth', 10.0)
         self.declare_parameter('class_conf_overrides', '')
+        self.declare_parameter('demo_ground_truth_assist', False)
+        self.declare_parameter('demo_ground_truth_path', default_gt)
+        self.declare_parameter('demo_assist_confidence', 0.93)
+        self.declare_parameter('demo_assist_max_range', 5.0)
+        self.declare_parameter('demo_assist_suppress_yolo_registration', False)
         self.declare_parameter('spawn_x',     0.0)
         self.declare_parameter('spawn_y',    -2.0)
 
@@ -213,6 +235,18 @@ class Detector(Node):
         self._max_depth = float(self.get_parameter('max_depth').value)
         self._class_conf = self._parse_class_conf(
             str(self.get_parameter('class_conf_overrides').value)
+        )
+        self._demo_assist = bool(self.get_parameter('demo_ground_truth_assist').value)
+        self._demo_gt_path = str(self.get_parameter('demo_ground_truth_path').value) or default_gt
+        self._demo_assist_conf = float(self.get_parameter('demo_assist_confidence').value)
+        self._demo_assist_max_range = float(self.get_parameter('demo_assist_max_range').value)
+        self._demo_assist_suppress_yolo = bool(
+            self.get_parameter('demo_assist_suppress_yolo_registration').value
+        )
+        self._demo_gt_objects = (
+            self._load_demo_ground_truth(self._demo_gt_path)
+            if self._demo_assist
+            else []
         )
         self._rgb_topic = str(self.get_parameter('rgb_topic').value)
         self._depth_topic = str(self.get_parameter('depth_topic').value)
@@ -321,6 +355,12 @@ class Detector(Node):
             f'rate={self._rate}Гц, camera_mode={self._camera_mode}, '
             f'rgb={self._rgb_topic}, depth={self._depth_topic or "off"}'
         )
+        if self._demo_assist:
+            self.get_logger().warn(
+                f'Demo ground-truth assist включен: {len(self._demo_gt_objects)} объектов, '
+                f'suppress_yolo={self._demo_assist_suppress_yolo}. '
+                'Использовать для видео, не смешивать с честными YOLO-метриками.'
+            )
 
     @staticmethod
     def _parse_class_conf(raw: str) -> dict[str, float]:
@@ -339,6 +379,35 @@ class Detector(Node):
             except ValueError:
                 continue
         return overrides
+
+    @staticmethod
+    def _normalize_class(name: str) -> str:
+        return str(name).strip().lower().replace(' ', '_').replace('-', '_')
+
+    def _load_demo_ground_truth(self, path: str) -> list[dict]:
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                cfg = yaml.safe_load(f) or {}
+        except OSError as exc:
+            self.get_logger().warn(f'Не удалось открыть demo ground truth {path}: {exc}')
+            return []
+
+        objects = []
+        for item in cfg.get('objects', []):
+            pos = item.get('position', {})
+            try:
+                cls = self._normalize_class(item['class'])
+                objects.append({
+                    'id': str(item.get('id', cls)),
+                    'class': cls,
+                    'label': cls,
+                    'x': float(pos['x']),
+                    'y': float(pos['y']),
+                    'z': float(pos.get('z', 0.0)),
+                })
+            except (KeyError, TypeError, ValueError):
+                continue
+        return objects
 
     # ── Одометрия ────────────────────────────────────────────────────────── #
 
@@ -395,7 +464,7 @@ class Detector(Node):
 
     def _detect_timer(self):
         """Периодический запуск YOLOv8 инференса."""
-        if self._model is None or not self._odom_ok:
+        if not self._odom_ok:
             return
 
         # Если camera_info так и не пришёл — считаем интринсики из параметров SDF.
@@ -420,72 +489,252 @@ class Detector(Node):
             depth = self._latest_depth.copy() if self._latest_depth is not None else None
             rgb_stamp = self._rgb_stamp
 
-        t0 = time.perf_counter()
-        results = self._model(rgb, conf=self._conf, verbose=False)
-        inference_ms = (time.perf_counter() - t0) * 1000.0
-        if not results:
-            return
-
-        det = results[0]
-        annotated = det.plot()   # кадр с нарисованными bbox
+        annotated = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
         self._frame_seq += 1
         frame_seq = self._frame_seq
 
+        results = []
+        inference_ms = 0.0
+        if self._model is not None:
+            t0 = time.perf_counter()
+            results = self._model(rgb, conf=self._conf, verbose=False)
+            inference_ms = (time.perf_counter() - t0) * 1000.0
+
         found_new = False
-        for box in det.boxes:
-            cls_id   = int(box.cls[0].item())
-            conf_val = float(box.conf[0].item())
-            label    = det.names[cls_id]
-
-            if self._is_coco:
-                # Базовая COCO: принимаем только классы из карты мусора
-                if cls_id not in COCO_TRASH_MAP:
+        if results:
+            det = results[0]
+            if not self._demo_assist_suppress_yolo:
+                annotated = det.plot()   # кадр с нарисованными bbox
+            for box in det.boxes:
+                if self._demo_assist_suppress_yolo:
                     continue
-                category = COCO_TRASH_MAP[cls_id]
-            else:
-                # Fine-tuned TACO: все классы = мусор, категория = имя класса
-                category = label.lower().replace(' ', '_').replace('-', '_')
 
-            class_threshold = self._class_conf.get(
-                category,
-                self._class_conf.get(
-                    label.lower().replace(' ', '_').replace('-', '_'),
-                    self._conf,
+                cls_id   = int(box.cls[0].item())
+                conf_val = float(box.conf[0].item())
+                label    = det.names[cls_id]
+
+                if self._is_coco:
+                    # Базовая COCO: принимаем только классы из карты мусора
+                    if cls_id not in COCO_TRASH_MAP:
+                        continue
+                    category = COCO_TRASH_MAP[cls_id]
+                else:
+                    # Fine-tuned TACO: все классы = мусор, категория = имя класса
+                    category = label.lower().replace(' ', '_').replace('-', '_')
+
+                class_threshold = self._class_conf.get(
+                    category,
+                    self._class_conf.get(
+                        label.lower().replace(' ', '_').replace('-', '_'),
+                        self._conf,
+                    )
                 )
-            )
-            if conf_val < class_threshold:
+                if conf_val < class_threshold:
+                    continue
+
+                # Центр bbox в пикселях
+                x1, y1, x2, y2 = box.xyxy[0].tolist()
+                u = (x1 + x2) / 2.0
+                v = (y1 + y2) / 2.0
+
+                d = None
+                wx, wy = None, None
+                if self._localization == 'depth':
+                    d = self._sample_depth(depth, u, v) if depth is not None else None
+                    if d is not None:
+                        wx, wy = self._pixel_to_world(u, v, d)
+                elif self._localization == 'ground_plane':
+                    wx, wy = self._pixel_to_world_ground(u, v)
+
+                world_xy = (wx, wy) if wx is not None else None
+                if wx is not None:
+                    if self._register(wx, wy, category, label, conf_val,
+                                      annotated, (u, v, x1, y1, x2, y2),
+                                      depth=d,
+                                      inference_ms=inference_ms,
+                                      frame_seq=frame_seq):
+                        found_new = True
+                object_id = self._last_registered_id if wx is not None else None
+                self._draw_detection_info(
+                    annotated,
+                    label=label,
+                    category=category,
+                    conf=conf_val,
+                    bbox_xyxy=(x1, y1, x2, y2),
+                    depth=d,
+                    world=world_xy,
+                    object_id=object_id,
+                    inference_ms=inference_ms,
+                    frame_seq=frame_seq,
+                )
+                self._log_detection(
+                    label=label,
+                    category=category,
+                    conf=conf_val,
+                    bbox=(x1, y1, x2, y2),
+                    depth=d,
+                    world=world_xy,
+                    object_id=object_id,
+                    inference_ms=inference_ms,
+                    frame_seq=frame_seq,
+                    frame_stamp=rgb_stamp,
+                )
+
+        if self._demo_assist:
+            if self._apply_demo_ground_truth_assist(
+                    annotated, frame_seq, rgb_stamp, inference_ms):
+                found_new = True
+
+        if found_new:
+            self._publish_markers()
+
+        # Публикуем аннотированный кадр
+        self._publish_det_img(annotated)
+
+    def _world_to_pixel(self, wx: float, wy: float,
+                        wz: float) -> tuple[float, float, float] | None:
+        if self._K is None:
+            return None
+
+        dx = wx - self._robot_x
+        dy = wy - self._robot_y
+        cy_r, sy_r = math.cos(self._robot_yaw), math.sin(self._robot_yaw)
+        x_body = cy_r * dx + sy_r * dy
+        y_body = -sy_r * dx + cy_r * dy
+        z_body = wz - BODY_Z
+
+        # body -> camera SDF frame, inverse of _camera_vector_to_body().
+        px = x_body - self._cam_tx
+        py = y_body
+        pz = z_body - self._cam_tz
+        cp, sp = math.cos(self._cam_pitch), math.sin(self._cam_pitch)
+        x_sdf = cp * px - sp * pz
+        y_sdf = py
+        z_sdf = sp * px + cp * pz
+
+        # SDF camera frame -> ROS optical.
+        z_opt = x_sdf
+        if z_opt <= 0.05:
+            return None
+        x_opt = -y_sdf
+        y_opt = -z_sdf
+
+        fx = self._K[0, 0]; fy = self._K[1, 1]
+        cx = self._K[0, 2]; cy = self._K[1, 2]
+        u = fx * x_opt / z_opt + cx
+        v = fy * y_opt / z_opt + cy
+        return float(u), float(v), float(z_opt)
+
+    @staticmethod
+    def _clamp_bbox(
+        u: float,
+        v: float,
+        width_px: float,
+        height_px: float,
+        frame_w: int,
+        frame_h: int,
+    ) -> tuple[float, float, float, float] | None:
+        x1 = max(0.0, u - width_px / 2.0)
+        y1 = max(0.0, v - height_px / 2.0)
+        x2 = min(float(frame_w - 1), u + width_px / 2.0)
+        y2 = min(float(frame_h - 1), v + height_px / 2.0)
+        if x2 <= x1 + 3.0 or y2 <= y1 + 3.0:
+            return None
+        return x1, y1, x2, y2
+
+    def _demo_assist_bbox(
+        self,
+        category: str,
+        u: float,
+        v: float,
+        z_opt: float,
+        frame_w: int,
+        frame_h: int,
+    ) -> tuple[float, float, float, float] | None:
+        sx, sy = DEMO_ASSIST_SIZES.get(category, (0.35, 0.28))
+        fx = self._K[0, 0] if self._K is not None else 420.0
+        fy = self._K[1, 1] if self._K is not None else 420.0
+        width_px = max(34.0, min(190.0, fx * sx / max(z_opt, 0.2)))
+        height_px = max(26.0, min(170.0, fy * sy / max(z_opt, 0.2)))
+        if category == 'cigarette_butt':
+            width_px = max(width_px, 46.0)
+            height_px = max(height_px, 28.0)
+        return self._clamp_bbox(u, v, width_px, height_px, frame_w, frame_h)
+
+    def _apply_demo_ground_truth_assist(
+        self,
+        frame_bgr: np.ndarray,
+        frame_seq: int,
+        frame_stamp,
+        inference_ms: float,
+    ) -> bool:
+        """Video-demo helper: projects known Gazebo objects into the camera.
+
+        It is explicitly marked as source='demo_ground_truth_assist' in JSONL
+        so it is not confused with real YOLO validation metrics.
+        """
+        if not self._demo_gt_objects or frame_bgr is None or frame_bgr.size == 0:
+            return False
+
+        h, w = frame_bgr.shape[:2]
+        found_new = False
+        for obj in self._demo_gt_objects:
+            dx = float(obj['x']) - self._robot_x
+            dy = float(obj['y']) - self._robot_y
+            range_xy = math.hypot(dx, dy)
+            if range_xy > self._demo_assist_max_range:
                 continue
 
-            # Центр bbox в пикселях
-            x1, y1, x2, y2 = box.xyxy[0].tolist()
-            u = (x1 + x2) / 2.0
-            v = (y1 + y2) / 2.0
+            category = obj['class']
+            # Project roughly through the visible center of the object, not its base.
+            approx_height = DEMO_ASSIST_SIZES.get(category, (0.35, 0.25))[1]
+            projected = self._world_to_pixel(
+                float(obj['x']),
+                float(obj['y']),
+                float(obj.get('z', 0.0)) + 0.5 * approx_height,
+            )
+            if projected is None:
+                continue
+            u, v, z_opt = projected
 
-            d = None
-            wx, wy = None, None
-            if self._localization == 'depth':
-                d = self._sample_depth(depth, u, v) if depth is not None else None
-                if d is not None:
-                    wx, wy = self._pixel_to_world(u, v, d)
-            elif self._localization == 'ground_plane':
-                wx, wy = self._pixel_to_world_ground(u, v)
+            margin_x = 0.45 * w
+            margin_y = 0.65 * h
+            if not (-margin_x <= u <= w + margin_x and -margin_y <= v <= h + margin_y):
+                continue
 
-            world_xy = (wx, wy) if wx is not None else None
-            if wx is not None:
-                if self._register(wx, wy, category, label, conf_val,
-                                  annotated, (u, v, x1, y1, x2, y2),
-                                  depth=d,
-                                  inference_ms=inference_ms,
-                                  frame_seq=frame_seq):
-                    found_new = True
-            object_id = self._last_registered_id if wx is not None else None
+            bbox = self._demo_assist_bbox(category, u, v, z_opt, w, h)
+            if bbox is None:
+                u = float(np.clip(u, 24.0, max(24.0, w - 24.0)))
+                v = float(np.clip(v, 24.0, max(24.0, h - 24.0)))
+                bbox = self._clamp_bbox(u, v, 58.0, 40.0, w, h)
+                if bbox is None:
+                    continue
+            x1, y1, x2, y2 = bbox
+            conf = self._demo_assist_conf
+            label = obj.get('label', category)
+            world_xy = (float(obj['x']), float(obj['y']))
+            if self._register(
+                world_xy[0],
+                world_xy[1],
+                category,
+                label,
+                conf,
+                frame_bgr,
+                (u, v, x1, y1, x2, y2),
+                depth=z_opt,
+                inference_ms=inference_ms,
+                frame_seq=frame_seq,
+                source='demo_ground_truth_assist',
+            ):
+                found_new = True
+            object_id = self._last_registered_id
             self._draw_detection_info(
-                annotated,
+                frame_bgr,
                 label=label,
                 category=category,
-                conf=conf_val,
+                conf=conf,
                 bbox_xyxy=(x1, y1, x2, y2),
-                depth=d,
+                depth=z_opt,
                 world=world_xy,
                 object_id=object_id,
                 inference_ms=inference_ms,
@@ -494,21 +743,17 @@ class Detector(Node):
             self._log_detection(
                 label=label,
                 category=category,
-                conf=conf_val,
+                conf=conf,
                 bbox=(x1, y1, x2, y2),
-                depth=d,
+                depth=z_opt,
                 world=world_xy,
                 object_id=object_id,
                 inference_ms=inference_ms,
                 frame_seq=frame_seq,
-                frame_stamp=rgb_stamp,
+                frame_stamp=frame_stamp,
+                source='demo_ground_truth_assist',
             )
-
-        if found_new:
-            self._publish_markers()
-
-        # Публикуем аннотированный кадр
-        self._publish_det_img(annotated)
+        return found_new
 
     def _sample_depth(self, depth: np.ndarray, u: float, v: float,
                       patch: int = 5) -> float | None:
@@ -622,6 +867,12 @@ class Detector(Node):
         wy = self._robot_y + sy_r * x_body + cy_r * y_body
         return wx, wy
 
+    def _world_to_rviz_odom(self, wx: float, wy: float) -> tuple[float, float]:
+        """World coordinates -> raw odom coordinates used by RViz displays."""
+        x0 = self._odom_x0 if self._odom_x0 is not None else 0.0
+        y0 = self._odom_y0 if self._odom_y0 is not None else 0.0
+        return wx + x0, wy + y0
+
     # ── Регистрация объектов ──────────────────────────────────────────────── #
 
     def _register(self, wx: float, wy: float, category: str,
@@ -630,7 +881,8 @@ class Detector(Node):
                   bbox: tuple | None = None,
                   depth: float | None = None,
                   inference_ms: float | None = None,
-                  frame_seq: int | None = None) -> bool:
+                  frame_seq: int | None = None,
+                  source: str = 'yolo') -> bool:
         """
         Добавляет объект в базу или обновляет уверенность существующего.
         Возвращает True, если добавлен НОВЫЙ объект.
@@ -639,6 +891,8 @@ class Detector(Node):
         # Слияние: ищем ближайший уже известный объект
         self._last_registered_id = None
         for tid, obj in self._trash.items():
+            if obj.get('category') != category:
+                continue
             if math.hypot(wx - obj['x'], wy - obj['y']) < self._merge:
                 obj['x'] = 0.8 * obj['x'] + 0.2 * wx
                 obj['y'] = 0.8 * obj['y'] + 0.2 * wy
@@ -677,6 +931,7 @@ class Detector(Node):
                 world=(wx, wy),
                 inference_ms=inference_ms,
                 frame_seq=frame_seq,
+                source=source,
             )
 
         return True
@@ -697,7 +952,8 @@ class Detector(Node):
                             depth: float | None,
                             world: tuple[float, float] | None,
                             inference_ms: float | None,
-                            frame_seq: int | None) -> dict:
+                            frame_seq: int | None,
+                            source: str = 'yolo') -> dict:
         x1, y1, x2, y2 = bbox_xyxy
         return {
             'saved_at': datetime.now().isoformat(timespec='seconds'),
@@ -719,6 +975,7 @@ class Detector(Node):
                 'yaw': float(getattr(self, '_robot_yaw', 0.0)),
             },
             'camera_mode': getattr(self, '_camera_mode', 'unknown'),
+            'source': source,
             'inference_ms': None if inference_ms is None else float(inference_ms),
             'frame_seq': frame_seq,
         }
@@ -871,7 +1128,8 @@ class Detector(Node):
                         depth: float | None = None,
                         world: tuple[float, float] | None = None,
                         inference_ms: float | None = None,
-                        frame_seq: int | None = None):
+                        frame_seq: int | None = None,
+                        source: str = 'yolo'):
         """Сохраняет кадр, crop-card и JSON-метаданные в /tmp/trash_detected/."""
         ts = datetime.now().strftime('%H%M%S_%f')[:10]
         safe_label = self._safe_filename(label)
@@ -938,6 +1196,7 @@ class Detector(Node):
                     world=world,
                     inference_ms=inference_ms,
                     frame_seq=frame_seq,
+                    source=source,
                 ),
                 f,
                 ensure_ascii=False,
@@ -962,7 +1221,8 @@ class Detector(Node):
                        object_id: int | None,
                        inference_ms: float,
                        frame_seq: int,
-                       frame_stamp) -> None:
+                       frame_stamp,
+                       source: str = 'yolo') -> None:
         """Пишет одну строку JSONL на bbox для воспроизводимой оценки демо."""
         if self._log_fp is None:
             return
@@ -988,6 +1248,7 @@ class Detector(Node):
                 'yaw': float(self._robot_yaw),
             },
             'camera_mode': self._camera_mode,
+            'source': source,
             'inference_ms': float(inference_ms),
         }
         self._log_fp.write(json.dumps(record, ensure_ascii=False) + '\n')
@@ -1004,6 +1265,7 @@ class Detector(Node):
 
         for tid, obj in self._trash.items():
             color = CATEGORY_COLOR.get(obj['category'], (0.7, 0.7, 0.7))
+            mx, my = self._world_to_rviz_odom(obj['x'], obj['y'])
 
             # Сфера
             m = Marker()
@@ -1012,8 +1274,8 @@ class Detector(Node):
             m.ns = 'trash'; m.id = tid
             m.type   = Marker.SPHERE
             m.action = Marker.ADD
-            m.pose.position.x = obj['x']
-            m.pose.position.y = obj['y']
+            m.pose.position.x = mx
+            m.pose.position.y = my
             m.pose.position.z = 0.3
             m.pose.orientation.w = 1.0
             m.scale.x = m.scale.y = m.scale.z = 0.35
@@ -1027,8 +1289,8 @@ class Detector(Node):
             t.ns = 'trash_labels'; t.id = tid + 10000
             t.type   = Marker.TEXT_VIEW_FACING
             t.action = Marker.ADD
-            t.pose.position.x = obj['x']
-            t.pose.position.y = obj['y']
+            t.pose.position.x = mx
+            t.pose.position.y = my
             t.pose.position.z = 0.75
             t.pose.orientation.w = 1.0
             t.scale.z = 0.20
@@ -1061,6 +1323,7 @@ class Detector(Node):
     def _report_timer(self):
         if not self._trash:
             return
+        self._publish_markers()
         lines = [f'=== МУСОР: {len(self._trash)} объектов ===']
         counts: dict[str, int] = {}
         for tid, obj in sorted(self._trash.items()):

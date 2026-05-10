@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="650" viewBox="0 0 1100 650">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="550.0" y="42" text-anchor="middle" font-family="DejaVu Sans, Arial" font-size="28" font-weight="700">Detector Inference Latency Histogram</text>
+<text x="28" y="295.0" transform="rotate(-90 28 295.0)" text-anchor="middle" font-family="DejaVu Sans, Arial" font-size="18">frames</text>
+<line x1="120" y1="90" x2="120" y2="500" stroke="#333" stroke-width="2"/>
+<line x1="120" y1="500" x2="1050" y2="500" stroke="#333" stroke-width="2"/>
+<line x1="120" y1="500.0" x2="1050" y2="500.0" stroke="#e6e6e6" stroke-width="1"/>
+<text x="108" y="505.0" text-anchor="end" font-family="DejaVu Sans, Arial" font-size="14" fill="#333">0.00</text>
+<line x1="120" y1="418.0" x2="1050" y2="418.0" stroke="#e6e6e6" stroke-width="1"/>
+<text x="108" y="423.0" text-anchor="end" font-family="DejaVu Sans, Arial" font-size="14" fill="#333">576.80</text>
+<line x1="120" y1="336.0" x2="1050" y2="336.0" stroke="#e6e6e6" stroke-width="1"/>
+<text x="108" y="341.0" text-anchor="end" font-family="DejaVu Sans, Arial" font-size="14" fill="#333">1153.60</text>
+<line x1="120" y1="254.0" x2="1050" y2="254.0" stroke="#e6e6e6" stroke-width="1"/>
+<text x="108" y="259.0" text-anchor="end" font-family="DejaVu Sans, Arial" font-size="14" fill="#333">1730.40</text>
+<line x1="120" y1="172.0" x2="1050" y2="172.0" stroke="#e6e6e6" stroke-width="1"/>
+<text x="108" y="177.0" text-anchor="end" font-family="DejaVu Sans, Arial" font-size="14" fill="#333">2307.20</text>
+<line x1="120" y1="90.0" x2="1050" y2="90.0" stroke="#e6e6e6" stroke-width="1"/>
+<text x="108" y="95.0" text-anchor="end" font-family="DejaVu Sans, Arial" font-size="14" fill="#333">2884.00</text>
+<rect x="132.4" y="90.0" width="52.7" height="410.0" fill="#9B51E0" rx="5"/>
+<text x="158.8" y="108.0" text-anchor="middle" font-family="DejaVu Sans, Arial" font-size="15" font-weight="700" fill="#222">2884.00</text>
+<text x="158.8" y="524.0" text-anchor="end" transform="rotate(-36 158.8 524.0)" font-family="DejaVu Sans, Arial" font-size="14" fill="#222">10.0-12.1</text>
+<rect x="209.9" y="267.3" width="52.7" height="232.7" fill="#9B51E0" rx="5"/>
+<text x="236.2" y="257.3" text-anchor="middle" font-family="DejaVu Sans, Arial" font-size="15" font-weight="700" fill="#222">1637.00</text>
+<text x="236.2" y="524.0" text-anchor="end" transform="rotate(-36 236.2 524.0)" font-family="DejaVu Sans, Arial" font-size="14" fill="#222">12.1-14.3</text>
+<rect x="287.4" y="464.9" width="52.7" height="35.1" fill="#9B51E0" rx="5"/>
+<text x="313.8" y="454.9" text-anchor="middle" font-family="DejaVu Sans, Arial" font-size="15" font-weight="700" fill="#222">247.00</text>
+<text x="313.8" y="524.0" text-anchor="end" transform="rotate(-36 313.8 524.0)" font-family="DejaVu Sans, Arial" font-size="14" fill="#222">14.3-16.4</text>
+<rect x="364.9" y="496.4" width="52.7" height="3.6" fill="#9B51E0" rx="5"/>
+<text x="391.2" y="486.4" text-anchor="middle" font-family="DejaVu Sans, Arial" font-size="15" font-weight="700" fill="#222">25.00</text>
+<text x="391.2" y="524.0" text-anchor="end" transform="rotate(-36 391.2 524.0)" font-family="DejaVu Sans, Arial" font-size="14" fill="#222">16.4-18.6</text>
+<rect x="442.4" y="498.4" width="52.7" height="1.6" fill="#9B51E0" rx="5"/>
+<text x="468.8" y="488.4" text-anchor="middle" font-family="DejaVu Sans, Arial" font-size="15" font-weight="700" fill="#222">11.00</text>
+<text x="468.8" y="524.0" text-anchor="end" transform="rotate(-36 468.8 524.0)" font-family="DejaVu Sans, Arial" font-size="14" fill="#222">18.6-20.7</text>
+<rect x="519.9" y="499.1" width="52.7" height="0.9" fill="#9B51E0" rx="5"/>
+<text x="546.2" y="489.1" text-anchor="middle" font-family="DejaVu Sans, Arial" font-size="15" font-weight="700" fill="#222">6.00</text>
+<text x="546.2" y="524.0" text-anchor="end" transform="rotate(-36 546.2 524.0)" font-family="DejaVu Sans, Arial" font-size="14" fill="#222">20.7-22.9</text>
+<rect x="597.4" y="499.6" width="52.7" height="0.4" fill="#9B51E0" rx="5"/>
+<text x="623.8" y="489.6" text-anchor="middle" font-family="DejaVu Sans, Arial" font-size="15" font-weight="700" fill="#222">3.00</text>
+<text x="623.8" y="524.0" text-anchor="end" transform="rotate(-36 623.8 524.0)" font-family="DejaVu Sans, Arial" font-size="14" fill="#222">22.9-25.0</text>
+<rect x="674.9" y="499.7" width="52.7" height="0.3" fill="#9B51E0" rx="5"/>
+<text x="701.2" y="489.7" text-anchor="middle" font-family="DejaVu Sans, Arial" font-size="15" font-weight="700" fill="#222">2.00</text>
+<text x="701.2" y="524.0" text-anchor="end" transform="rotate(-36 701.2 524.0)" font-family="DejaVu Sans, Arial" font-size="14" fill="#222">25.0-27.2</text>
+<rect x="752.4" y="499.7" width="52.7" height="0.3" fill="#9B51E0" rx="5"/>
+<text x="778.8" y="489.7" text-anchor="middle" font-family="DejaVu Sans, Arial" font-size="15" font-weight="700" fill="#222">2.00</text>
+<text x="778.8" y="524.0" text-anchor="end" transform="rotate(-36 778.8 524.0)" font-family="DejaVu Sans, Arial" font-size="14" fill="#222">27.2-29.3</text>
+<rect x="829.9" y="500.0" width="52.7" height="0.0" fill="#9B51E0" rx="5"/>
+<text x="856.2" y="490.0" text-anchor="middle" font-family="DejaVu Sans, Arial" font-size="15" font-weight="700" fill="#222">0.00</text>
+<text x="856.2" y="524.0" text-anchor="end" transform="rotate(-36 856.2 524.0)" font-family="DejaVu Sans, Arial" font-size="14" fill="#222">29.3-31.5</text>
+<rect x="907.4" y="500.0" width="52.7" height="0.0" fill="#9B51E0" rx="5"/>
+<text x="933.8" y="490.0" text-anchor="middle" font-family="DejaVu Sans, Arial" font-size="15" font-weight="700" fill="#222">0.00</text>
+<text x="933.8" y="524.0" text-anchor="end" transform="rotate(-36 933.8 524.0)" font-family="DejaVu Sans, Arial" font-size="14" fill="#222">31.5-33.6</text>
+<rect x="984.9" y="499.9" width="52.7" height="0.1" fill="#9B51E0" rx="5"/>
+<text x="1011.2" y="489.9" text-anchor="middle" font-family="DejaVu Sans, Arial" font-size="15" font-weight="700" fill="#222">1.00</text>
+<text x="1011.2" y="524.0" text-anchor="end" transform="rotate(-36 1011.2 524.0)" font-family="DejaVu Sans, Arial" font-size="14" fill="#222">33.6-35.8</text>
+</svg>

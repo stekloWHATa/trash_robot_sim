@@ -75,8 +75,8 @@ Visualization Manager:
       Enabled: true
       Name: TrashMarkers
       Topic:
-        Depth: 5
-        Durability Policy: Volatile
+        Depth: 10
+        Durability Policy: Transient Local
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable

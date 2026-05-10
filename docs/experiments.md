@@ -39,10 +39,33 @@ ros2 launch trash_robot_sim detection_demo.launch.py scripted_motion:=false
 - Окно с `/detections_img`: bbox, класс и confidence на RGB-кадре.
 - Терминал или сохраненный `/trash_report`: список найденных объектов.
 
+## Сцена и маршрут
+
+Текущий `detection_demo_world` сделан под видеодемонстрацию:
+
+- рабочая плоскость расширена до 24 x 14 м;
+- декоративные стены удалены, чтобы не ломать кадр Gazebo;
+- мусор разложен вдоль зигзагообразной линии движения;
+- в сцене по одному уникальному объекту MVP-классов:
+  `cigarette_butt`, `aluminum_can`, `plastic_bottle`, `plastic_bag`,
+  `cardboard_box`, `paper_packaging`;
+- `scripts/scripted_motion.py` ведет робота по waypoint-маршруту через `/odom`,
+  а не по грубым таймерам.
+
+Маршрут по точкам:
+
+```text
+(0.0, -2.0) -> (1.8, -1.4) -> (3.6, -3.0) -> (5.4, -1.4)
+             -> (7.2, -3.0) -> (9.0, -1.4) -> (10.8, -3.0)
+```
+
+Ground truth для оценки локализации лежит в
+`config/trash_ground_truth.yaml`.
+
 Логи:
 
 - `/tmp/trash_detections.jsonl` - каждая строка содержит class, confidence,
-  bbox, depth, world x/y, robot pose, latency.
+  bbox, depth, world x/y, robot pose, latency и `source`;
 - `/tmp/trash_detected` - полный кадр, crop, карточка `*_card.jpg` с классом,
   confidence, bbox, depth, world x/y, pose робота, latency и JSON-метаданные
   `*_meta.json` для новых объектов.
@@ -91,6 +114,20 @@ python3 scripts/evaluate_detection_run.py \
 По умолчанию отчет сохраняется в `data/eval/<timestamp>/report.json` и
 `report.md`.
 
+Отдельная папка с графиками/таблицами для диплома:
+
+```bash
+python3 scripts/generate_demo_report_assets.py \
+  --ground-truth config/trash_ground_truth.yaml \
+  --detections /tmp/trash_detections.jsonl \
+  --output-dir reports/detection_demo/latest
+```
+
+Скрипт пишет `summary.md`, `summary.json`, CSV-таблицу и SVG-графики:
+распределение детекций по классам, confidence/depth по классам, scatter
+локализации в мировых координатах, latency histogram и timeline детекций.
+Это реальные графики по JSONL-логу конкретного прогона.
+
 Скрипт считает:
 
 - TP/FP/FN по классам;
@@ -102,6 +139,12 @@ python3 scripts/evaluate_detection_run.py \
 Числа из этого отчета можно использовать в дипломе как результаты конкретного
 sim-to-demo прогона. Иллюстративные графики допустимы только если явно
 подписаны как synthetic/demo illustration, а не как реальные измерения.
+
+Важно: для красивого видеодемо включен `demo_ground_truth_assist`, который
+стабильно рисует и публикует объекты подготовленной Gazebo-сцены, если YOLO
+из-за sim-to-real gap пропускает mesh. Такие строки в JSONL имеют
+`source=demo_ground_truth_assist`; для честных метрик YOLO этот режим нужно
+выключить в `config/params.yaml` и отдельно валидировать `models/yolov8s_trash.pt`.
 
 ## Критерии готовности видео
 

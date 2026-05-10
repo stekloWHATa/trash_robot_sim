@@ -85,6 +85,16 @@ trash_detector:
     # Работает поверх глобального conf_thresh.
     class_conf_overrides: ""
 
+    # Видеодемо-режим: использует ground truth подготовленной Gazebo-сцены,
+    # чтобы стабильно показать все объекты на /detections_img и /trash_markers.
+    # В JSONL такие записи помечены source=demo_ground_truth_assist.
+    # Для честных YOLO-метрик выключить и валидировать модель отдельно.
+    demo_ground_truth_assist: true
+    demo_ground_truth_path: ""
+    demo_assist_confidence: 0.93
+    demo_assist_max_range: 5.0
+    demo_assist_suppress_yolo_registration: true
+
     # rgbd: RGB и depth берутся из одной RGBD-камеры.
     # nav_ground_plane: RGB с NavCamera, локализация через плоскость пола.
     camera_mode: "rgbd"

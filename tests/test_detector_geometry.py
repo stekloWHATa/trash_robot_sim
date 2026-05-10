@@ -2,6 +2,7 @@ import json
 import math
 import os
 import sys
+import io
 
 import numpy as np
 
@@ -26,6 +27,8 @@ def _make_detector_stub():
     node._robot_x = 1.0
     node._robot_y = -2.0
     node._robot_yaw = 0.0
+    node._odom_x0 = None
+    node._odom_y0 = None
     node._cam_tx = 0.60
     node._cam_tz = 0.83
     node._cam_pitch = 1.10
@@ -95,6 +98,64 @@ def test_pixel_to_world_ground_intersects_floor_plane():
     expected_x = node._robot_x + node._cam_tx + t * math.cos(node._cam_pitch)
     assert wx == pytest_approx(expected_x)
     assert wy == pytest_approx(node._robot_y)
+
+
+def test_world_to_pixel_projects_camera_axis_to_image_center():
+    node = _make_detector_stub()
+    depth = 2.0
+    x_body = node._cam_tx + math.cos(node._cam_pitch) * depth
+    z_body = node._cam_tz - math.sin(node._cam_pitch) * depth
+    wx = node._robot_x + x_body
+    wy = node._robot_y
+    wz = detector.BODY_Z + z_body
+
+    u, v, z_opt = detector.Detector._world_to_pixel(node, wx, wy, wz)
+
+    assert u == pytest_approx(50.0)
+    assert v == pytest_approx(40.0)
+    assert z_opt == pytest_approx(depth)
+
+
+def test_world_to_rviz_odom_applies_raw_odom_offset_for_markers():
+    node = _make_detector_stub()
+    node._odom_x0 = -0.5
+    node._odom_y0 = 2.0
+
+    mx, my = detector.Detector._world_to_rviz_odom(node, 4.0, -3.0)
+
+    assert mx == pytest_approx(3.5)
+    assert my == pytest_approx(-1.0)
+
+
+def test_demo_ground_truth_assist_registers_visible_object_and_marks_source():
+    node = _make_detector_stub()
+    depth = 2.0
+    x_body = node._cam_tx + math.cos(node._cam_pitch) * depth
+    z_body = node._cam_tz - math.sin(node._cam_pitch) * depth
+    node._demo_gt_objects = [
+        {
+            'id': 'demo_plastic_bottle_1',
+            'class': 'plastic_bottle',
+            'label': 'plastic_bottle',
+            'x': node._robot_x + x_body,
+            'y': node._robot_y,
+            'z': detector.BODY_Z + z_body,
+        }
+    ]
+    node._demo_assist_max_range = 10.0
+    node._demo_assist_conf = 0.93
+    node._log_fp = io.StringIO()
+    frame = np.zeros((90, 120, 3), dtype=np.uint8)
+
+    assert detector.Detector._apply_demo_ground_truth_assist(
+        node, frame, frame_seq=3, frame_stamp=None, inference_ms=11.0)
+
+    assert len(node._trash) == 1
+    assert node._trash[0]['category'] == 'plastic_bottle'
+    record = json.loads(node._log_fp.getvalue().strip())
+    assert record['source'] == 'demo_ground_truth_assist'
+    assert record['class'] == 'plastic_bottle'
+    assert frame.sum() > 0
 
 
 def test_register_merges_nearby_detections_and_adds_far_ones():

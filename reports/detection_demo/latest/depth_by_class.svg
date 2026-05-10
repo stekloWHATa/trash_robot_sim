@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="650" viewBox="0 0 1100 650">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="550.0" y="42" text-anchor="middle" font-family="DejaVu Sans, Arial" font-size="28" font-weight="700">Mean RGBD Depth by Class</text>
+<text x="28" y="295.0" transform="rotate(-90 28 295.0)" text-anchor="middle" font-family="DejaVu Sans, Arial" font-size="18">depth, m</text>
+<line x1="120" y1="90" x2="120" y2="500" stroke="#333" stroke-width="2"/>
+<line x1="120" y1="500" x2="1050" y2="500" stroke="#333" stroke-width="2"/>
+<line x1="120" y1="500.0" x2="1050" y2="500.0" stroke="#e6e6e6" stroke-width="1"/>
+<text x="108" y="505.0" text-anchor="end" font-family="DejaVu Sans, Arial" font-size="14" fill="#333">0.00</text>
+<line x1="120" y1="418.0" x2="1050" y2="418.0" stroke="#e6e6e6" stroke-width="1"/>
+<text x="108" y="423.0" text-anchor="end" font-family="DejaVu Sans, Arial" font-size="14" fill="#333">0.31</text>
+<line x1="120" y1="336.0" x2="1050" y2="336.0" stroke="#e6e6e6" stroke-width="1"/>
+<text x="108" y="341.0" text-anchor="end" font-family="DejaVu Sans, Arial" font-size="14" fill="#333">0.61</text>
+<line x1="120" y1="254.0" x2="1050" y2="254.0" stroke="#e6e6e6" stroke-width="1"/>
+<text x="108" y="259.0" text-anchor="end" font-family="DejaVu Sans, Arial" font-size="14" fill="#333">0.92</text>
+<line x1="120" y1="172.0" x2="1050" y2="172.0" stroke="#e6e6e6" stroke-width="1"/>
+<text x="108" y="177.0" text-anchor="end" font-family="DejaVu Sans, Arial" font-size="14" fill="#333">1.22</text>
+<line x1="120" y1="90.0" x2="1050" y2="90.0" stroke="#e6e6e6" stroke-width="1"/>
+<text x="108" y="95.0" text-anchor="end" font-family="DejaVu Sans, Arial" font-size="14" fill="#333">1.53</text>
+<rect x="232.0" y="90.0" width="86.0" height="410.0" fill="#F2994A" rx="5"/>
+<text x="275.0" y="108.0" text-anchor="middle" font-family="DejaVu Sans, Arial" font-size="15" font-weight="700" fill="#222">1.53</text>
+<text x="275.0" y="524.0" text-anchor="end" transform="rotate(-36 275.0 524.0)" font-family="DejaVu Sans, Arial" font-size="14" fill="#222">cardboard_box</text>
+<rect x="542.0" y="178.8" width="86.0" height="321.2" fill="#F2994A" rx="5"/>
+<text x="585.0" y="168.8" text-anchor="middle" font-family="DejaVu Sans, Arial" font-size="15" font-weight="700" fill="#222">1.20</text>
+<text x="585.0" y="524.0" text-anchor="end" transform="rotate(-36 585.0 524.0)" font-family="DejaVu Sans, Arial" font-size="14" fill="#222">cigarette_butt</text>
+<rect x="852.0" y="204.0" width="86.0" height="296.0" fill="#F2994A" rx="5"/>
+<text x="895.0" y="194.0" text-anchor="middle" font-family="DejaVu Sans, Arial" font-size="15" font-weight="700" fill="#222">1.11</text>
+<text x="895.0" y="524.0" text-anchor="end" transform="rotate(-36 895.0 524.0)" font-family="DejaVu Sans, Arial" font-size="14" fill="#222">paper_packaging</text>
+</svg>

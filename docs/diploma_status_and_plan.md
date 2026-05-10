@@ -21,7 +21,7 @@
 2. Вероятность корректной локализации объекта в сцене: не менее 85%.
 3. Минимальное количество распознаваемых категорий мусора: не менее 5 классов.
 4. Совместимость программного обеспечения с операционной системой Ubuntu 24.04 и фреймворком ROS 2.
-5. Размер рабочей сцены демонстрационного стенда: 16 x 12 м, площадь 192 м².
+5. Размер рабочей сцены демонстрационного стенда: 24 x 14 м, площадь 336 м².
 6. Частота визуализации рабочей сцены в Gazebo Sim: не менее 30 кадр/с.
 7. Частота визуализации результатов локализации в RViz: не менее 30 кадр/с.
 
@@ -77,7 +77,7 @@ YOLO и данные:
 - добавлены `tests/test_train_yolo.py`;
 - теперь `train_yolo.py` можно импортировать без установленного `ultralytics`, потому что импорт YOLO перенесен внутрь `train()`;
 - тесты проверяют нормализацию Roboflow `data.yaml`, дедупликацию классов, перемаппинг label id, поддержку dict-формата `names`, создание пустых labels для неразмеченных изображений;
-- полный локальный прогон: `python3 -m pytest tests -q` -> 49 passed.
+- полный локальный прогон: `python3 -m pytest tests -q` -> 65 passed.
 
 Обновление следующего этапа:
 - добавлен `config/trash_classes.yaml` с целевой таксономией на 8 классов;
@@ -293,14 +293,23 @@ YOLO и данные:
 - есть `map_builder.py` с occupancy grid по лидару, его можно использовать только как карту/подложку для маркеров;
 - есть `navigator.py`, но на этом этапе он не является приоритетом;
 - есть `launch/detection_demo.launch.py`, `worlds/detection_demo_world.sdf` и `scripts/scripted_motion.py` для video-first MVP без запуска навигатора;
-- есть локальные procedural mesh-модели мусора в `models/trash/...` и `config/trash_ground_truth.yaml` для оценки локализации;
+- есть mesh-модели мусора в `models/trash/...`, включая текстурированный OBJ
+  для пачки чипсов (`paper_packaging`), и `config/trash_ground_truth.yaml`
+  для оценки локализации;
 - есть `scripts/train_yolo.py`, `scripts/audit_dataset.py`, `config/trash_classes.yaml`, `docs/datasets.md`;
 - есть `scripts/evaluate_detection_run.py`, который считает TP/FP/FN, F1, ошибку локализации и latency по JSONL-логу детектора;
+- есть `scripts/generate_demo_report_assets.py`, который собирает отдельную
+  папку `reports/detection_demo/latest` с CSV/JSON/MD и SVG-графиками из
+  реального JSONL-лога детектора;
+- для видеодемо включен `demo_ground_truth_assist`: он стабилизирует bbox и
+  `/trash_markers` на подготовленной Gazebo-сцене, а в JSONL помечает такие
+  строки как `source=demo_ground_truth_assist`, чтобы не путать их с честными
+  YOLO-метриками;
 - целевые классы: `cigarette_butt`, `plastic_bottle`, `glass_bottle`, `aluminum_can`, `plastic_bag`, `cardboard_box`, `paper_packaging`, `other_trash`;
 - текущая старая модель `data/runs/trash_finetune`: precision 0.5255, recall 0.2916, mAP50 0.3337, mAP50-95 0.2335, качество недостаточно;
 - следующий основной training pipeline переведен на `yolov8s`, `imgsz=960`,
   MVP-таксономию `config/trash_classes_mvp.yaml` и readiness-check перед долгим обучением;
-- быстрые тесты проходят: `python3 -m pytest tests -q`.
+- быстрые тесты проходят: `python3 -m pytest tests -q` -> 65 passed.
 
 Цель следующего этапа:
 - собрать демонстрационный стенд “детекция + локализация” без зависимости от автономного объезда;

@@ -26,6 +26,7 @@ install(PROGRAMS
   scripts/capture_ros_images.py
   scripts/run_demo_capture.py
   scripts/evaluate_detection_run.py
+  scripts/generate_demo_report_assets.py
   scripts/generate_textured_trash_assets.py
   scripts/scripted_motion.py
   DESTINATION lib/${PROJECT_NAME}
